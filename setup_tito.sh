@@ -13,4 +13,7 @@ cd ../../
 
 chmod +x pipeline.sh
 
+mkdir precip/
+mkdir precipEF5/
+
 echo "Environment installed successfully..."
