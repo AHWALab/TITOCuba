@@ -14,7 +14,7 @@ TITO is a framework designed to run the EF5 hydrologic model operationally, inte
 **3. Run the set up code**
    This step might take few minutes. 
   ```sh
-  ./setup_tito.sh
+  bash setup_tito.sh
   ```
 **4. Add the new conda env to your routines**
   Open `pipeline.sh` and change the path to the conda environment, should be something like this:
