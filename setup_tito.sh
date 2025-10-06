@@ -11,4 +11,6 @@ pip install -e .
 conda install -y requests
 cd ../../
 
+chmod +x pipeline.sh
+
 echo "Environment installed successfully..."
