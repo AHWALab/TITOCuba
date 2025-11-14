@@ -1,0 +1,358 @@
+[Basic]
+DEM=basic/DEM_cuba1km.tif
+DDM=basic/FDIR_cuba1km.tif
+FAM=basic/FAC_cuba1km.tif
+PROJ=geographic
+ESRIDDM=true SelfFAM=false
+
+[PrecipForcing IMERG]
+TYPE=TIF
+UNIT=mm/30u
+FREQ=30u
+LOC=precipEF5/
+NAME=imerg.qpe.YYYYMMDDHHUU.30minAccum.tif
+
+[PrecipForcing GFS]
+TYPE=TIF
+UNIT=mm/h
+FREQ=1h
+LOC=qpf_store/gfs_data/
+NAME=gfs.YYYYMMDDHH00.tif
+
+[PETForcing CLIMO]
+LOC=pet/
+FREQ=1m
+UNIT=mm/d
+NAME=PET.MM.tif 
+TYPE=TIF
+
+#---Start Gauge-Basin Block
+[Gauge La_Habana]
+LON=-82.343773
+LAT=23.135439
+OUTPUTTS=TRUE
+
+[Gauge Santiago_de_Cuba]
+LON=-75.837500
+LAT=20.029167
+OUTPUTTS=TRUE
+
+[Gauge Camagey]
+LON=-77.929167
+LAT=21.370833
+OUTPUTTS=TRUE
+
+[Gauge Holgun]
+LON=-76.254167
+LAT=20.879167
+OUTPUTTS=TRUE
+
+[Gauge Bayamo]
+LON=-76.654167
+LAT=20.379167
+OUTPUTTS=TRUE
+
+[Gauge Santa_Clara]
+LON=-79.970833
+LAT=22.412500
+OUTPUTTS=TRUE
+
+[Gauge Las_Tunas]
+LON=-76.962500
+LAT=20.954167
+OUTPUTTS=TRUE
+
+[Gauge Cienfuegos]
+LON=-80.462500
+LAT=22.154167
+OUTPUTTS=TRUE
+
+[Gauge Pinar_del_Ro]
+LON=-83.695833
+LAT=22.429167
+OUTPUTTS=TRUE
+
+[Gauge Matanzas]
+LON=-81.588095
+LAT=23.038409
+OUTPUTTS=TRUE
+
+[Gauge Ciego_de_vila]
+LON=-78.779088
+LAT=21.852966
+OUTPUTTS=TRUE
+
+[Gauge Manzanillo]
+LON=-77.095591
+LAT=20.345091
+OUTPUTTS=TRUE
+
+[Gauge Guanabacoa]
+LON=-82.295833
+LAT=23.137500
+OUTPUTTS=TRUE
+
+[Gauge Sancti_Spritus]
+LON=-79.437500
+LAT=21.920833
+OUTPUTTS=TRUE
+
+[Gauge Crdenas]
+LON=-81.198061
+LAT=23.020220
+OUTPUTTS=TRUE
+
+[Gauge Palma_Soriano]
+LON=-76.004167
+LAT=20.220833
+OUTPUTTS=TRUE
+
+[Gauge Moa]
+LON=-74.922280
+LAT=20.635216
+OUTPUTTS=TRUE
+
+[Gauge Morn]
+LON=-78.620833
+LAT=22.104167
+OUTPUTTS=TRUE
+
+[Gauge Jiguan]
+LON=-76.437500
+LAT=20.362500
+OUTPUTTS=TRUE
+
+[Gauge Florida]
+LON=-78.237260
+LAT=21.505927
+OUTPUTTS=TRUE
+
+[Gauge Yara]
+LON=-76.962500
+LAT=20.279167
+OUTPUTTS=TRUE
+
+[Gauge Artemisa]
+LON=-82.754167
+LAT=22.804167
+OUTPUTTS=TRUE
+
+[Gauge Contramaestre]
+LON=-76.237500
+LAT=20.304167
+OUTPUTTS=TRUE
+
+[Gauge Nueva_Gerona]
+LON=-82.795833
+LAT=21.895833
+OUTPUTTS=TRUE
+
+[Gauge Bartolom_Mas]
+LON=-76.954167
+LAT=20.179167
+OUTPUTTS=TRUE
+
+[Gauge El_Salvador]
+LON=-75.237500
+LAT=20.220833
+OUTPUTTS=TRUE
+
+[Gauge Ro_Cauto]
+LON=-76.920833
+LAT=20.554167
+OUTPUTTS=TRUE
+
+[Gauge Coln]
+LON=-80.904167
+LAT=22.704167
+OUTPUTTS=TRUE
+
+[Gauge Baracoa]
+LON=-74.522727
+LAT=20.346000
+OUTPUTTS=TRUE
+
+[Gauge Guisa]
+LON=-76.545833
+LAT=20.245833
+OUTPUTTS=TRUE
+
+[Gauge Gines]
+LON=-82.037500
+LAT=22.845833
+OUTPUTTS=TRUE
+
+[Gauge San_Jos_de_las_Lajas]
+LON=-82.145833
+LAT=22.954167
+OUTPUTTS=TRUE
+
+[Gauge Niquero]
+LON=-77.562091
+LAT=20.020053
+OUTPUTTS=TRUE
+
+[Gauge Placetas]
+LON=-79.654167
+LAT=22.304167
+OUTPUTTS=TRUE
+
+[Gauge Campechuela]
+LON=-77.236311
+LAT=20.254000
+OUTPUTTS=TRUE
+
+[Gauge Banes]
+LON=-75.729167
+LAT=20.954167
+OUTPUTTS=TRUE
+
+[Gauge San_Luis]
+LON=-75.845833
+LAT=20.187500
+OUTPUTTS=TRUE
+
+[Gauge Puerto_Padre]
+LON=-76.612500
+LAT=21.204167
+OUTPUTTS=TRUE
+
+[Gauge San_Antonio_de_los_Baos]
+LON=-82.504167
+LAT=22.879167
+OUTPUTTS=TRUE
+
+[Gauge Caibarin]
+LON=-79.494717
+LAT=22.503204
+OUTPUTTS=TRUE
+
+[Gauge Primero_de_Enero]
+LON=-78.420833
+LAT=21.954167
+OUTPUTTS=TRUE
+
+[Gauge Amancio]
+LON=-77.587500
+LAT=20.820833
+OUTPUTTS=TRUE
+
+[Gauge Jess_Menndez]
+LON=-76.470833
+LAT=21.170833
+OUTPUTTS=TRUE
+
+[Gauge Quemado_de_Gines]
+LON=-80.245833
+LAT=22.779167
+OUTPUTTS=TRUE
+
+[Gauge La_Palma]
+LON=-83.554167
+LAT=22.754167
+OUTPUTTS=TRUE
+
+[Gauge Playa_Santa_Luca]
+LON=-77.061962
+LAT=21.544886
+OUTPUTTS=TRUE
+
+[Gauge Paso_Quemado]
+LON=-83.312500
+LAT=22.579167
+OUTPUTTS=TRUE
+
+[Gauge Corts]
+LON=-84.029985
+LAT=22.054742
+OUTPUTTS=TRUE
+
+[Gauge Playa_Florida]
+LON=-78.554500
+LAT=21.419943
+OUTPUTTS=TRUE
+
+[Gauge Muiz]
+LON=-78.337500
+LAT=22.095833
+OUTPUTTS=TRUE
+
+
+[Basin 0]
+ gauge=La_Habana gauge=Santiago_de_Cuba gauge=Camagey gauge=Holgun gauge=Bayamo gauge=Santa_Clara gauge=Las_Tunas gauge=Cienfuegos gauge=Pinar_del_Ro gauge=Matanzas gauge=Ciego_de_vila gauge=Manzanillo gauge=Guanabacoa gauge=Sancti_Spritus gauge=Crdenas gauge=Palma_Soriano gauge=Moa gauge=Morn gauge=Jiguan gauge=Florida gauge=Yara gauge=Artemisa gauge=Contramaestre gauge=Nueva_Gerona gauge=Bartolom_Mas gauge=El_Salvador gauge=Ro_Cauto gauge=Coln gauge=Baracoa gauge=Guisa gauge=Gines gauge=San_Jos_de_las_Lajas gauge=Niquero gauge=Placetas gauge=Campechuela gauge=Banes gauge=San_Luis gauge=Puerto_Padre gauge=San_Antonio_de_los_Baos gauge=Caibarin gauge=Primero_de_Enero gauge=Amancio gauge=Jess_Menndez gauge=Quemado_de_Gines gauge=La_Palma gauge=Playa_Santa_Luca gauge=Paso_Quemado gauge=Corts gauge=Playa_Florida gauge=Muiz
+
+ #---End Gauge-Basin Block
+
+[CrestParamSet MyCRESTPAR]
+wm_grid=parameters/crest_Wm.tif
+b_grid=parameters/crest_b.tif
+im_grid=parameters/crest_IM.tif
+fc_grid=parameters/crest_Fc_Ksat.tif
+gauge=La_Habana
+wm=1.00
+b=1.0
+im=0.01
+ke=1.0
+fc=1.00
+iwu=0.0
+
+[kwparamset MyKWPAR]
+alpha_grid=parameters/kw_alpha.tif
+beta_grid=parameters/kw_beta.tif
+alpha0_grid=parameters/kw_alpha0.tif
+under_grid=parameters/crest_Fc_Ksat.tif
+gauge=La_Habana
+alpha=1.0
+alpha0=1.0
+beta=1.0
+under=0.001
+leaki=0.03
+th=12.0
+isu=0.0
+
+[Task Simulation_QPE]
+STYLE=SIMU
+MODEL=crest
+ROUTING=KW
+BASIN=0
+PRECIP=IMERG
+PET=CLIMO
+OUTPUT={OUTPUTPATH}
+STATES={STATESPATH}
+OUTPUT_GRIDS=MAXUNITSTREAMFLOW|MAXSTREAMFLOW|PRECIPACCUM
+defaultparamsgauge=La_Habana
+PARAM_SET=MyCRESTPAR
+ROUTING_PARAM_Set=MyKWPAR
+TIMESTEP=30u
+TIME_BEGIN={TIMEBEGIN}
+TIME_WARMEND={TIMEWARMEND}
+TIME_STATE={TIMESTATE}
+TIME_END={TIMEEND}
+
+[Task Simulation_QPF]
+STYLE=SIMU
+MODEL=crest
+ROUTING=KW
+BASIN=0
+PRECIP=IMERG
+PRECIPFORECAST=GFS
+PET=CLIMO
+OUTPUT={OUTPUTPATH}
+STATES={STATESPATH}
+OUTPUT_GRIDS=MAXUNITSTREAMFLOW|UNITSTREAMFLOW|MAXSTREAMFLOW|PRECIPACCUM
+defaultparamsgauge=La_Habana
+PARAM_SET=MyCRESTPAR
+ROUTING_PARAM_Set=MyKWPAR
+TIMESTEP=30u
+TIME_BEGIN={TIMEBEGIN}
+TIME_WARMEND={TIMEWARMEND}
+TIME_STATE={TIMESTATE}
+TIME_END={TIMEEND}
+TIMESTEP_LR={TIMESTEPLR}
+TIME_BEGIN_LR={TIMEBEGINLR}
+#co_file={OUTPUTPATH}/co_{SYSTEMMODEL}.csv
+
+
+[Execute]
+task=Simulation_QPE
+#task=Simulation_QPF

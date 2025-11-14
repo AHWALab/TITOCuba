@@ -26,6 +26,11 @@ def GFS_searcher(path_gfs, qpf_store_path, start_time, end_time, xmin, xmax, ymi
         Spatial domain for download_GFS.
     """
 
+    # Resolve archive path and ensure store path exists
+    path_gfs_resolved = os.path.abspath(path_gfs)
+    if not os.path.isdir(path_gfs_resolved):
+        print(f"Warning: GFS archive path does not exist or is not a directory: {path_gfs_resolved}")
+
     # Ensure qpf_store_path exists
     download_folder = os.path.join(qpf_store_path, "gfs_data/")
     os.makedirs(download_folder, exist_ok=True)
@@ -43,7 +48,7 @@ def GFS_searcher(path_gfs, qpf_store_path, start_time, end_time, xmin, xmax, ymi
 
     # Build expected file names
     expected_files = [
-        os.path.join(path_gfs, f"gfs.{t:%Y%m%d%H%M}.tif") for t in expected_times
+        os.path.join(path_gfs_resolved, f"gfs.{t:%Y%m%d%H%M}.tif") for t in expected_times
     ]
     
     missing_files = [f for f in expected_files if not os.path.exists(f)]
@@ -58,13 +63,23 @@ def GFS_searcher(path_gfs, qpf_store_path, start_time, end_time, xmin, xmax, ymi
                 print(f"Failed to copy {f}: {e}")
         print("Copy completed.")
     else:
-        print(f"⚠️ Missing {len(missing_files)} files. Triggering download...")
+        print(f"⚠️ Missing {len(missing_files)} files. Triggering download via downloader fallback...")
 
-    # Adjust start_time to previous GFS cycle (00,06,12,18)
-        new_start = start_time.replace(minute=0, second=0, microsecond=0)
-        while new_start.hour % 6 != 0:
-            new_start -= timedelta(hours=1)
-        # Call downloader
-        download_GFS(new_start, end_time, xmin, xmax, ymin, ymax, download_folder)
+        # Clean any previous partial downloads for a fresh attempt
+        for f in glob.glob(os.path.join(download_folder, "*.tif")):
+            try:
+                os.remove(f)
+            except Exception:
+                pass
+
+        # Delegate fallback-to-previous-cycle logic to download_GFS
+        print(f"Calling download_GFS with start_time: {start_time}, end_time: {end_time}")
+        print(f"Download folder: {download_folder}")
+        result = download_GFS(start_time, end_time, xmin, xmax, ymin, ymax, download_folder)
+        num_written = len(result) if result else 0
+        print(f"Download completed. Files written: {num_written}")
+
+        if num_written == 0:
+            raise RuntimeError("No GFS data available after downloader fallback attempts.")
         
         

@@ -1,7 +1,17 @@
 import os            
 import shutil        
-from datetime import timedelta  
+from datetime import datetime, timedelta, timezone  
 from tito_utils.file_utils.datetime_utils import get_geotiff_datetime
+
+def _ensure_aware_utc(dt):
+    if dt is None:
+        return None
+    try:
+        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return dt.replace(tzinfo=timezone.utc)
 
 def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
     """Function that cleans up the precip folder for the current EF5 run
@@ -12,12 +22,16 @@ def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
         precipFolder {str} -- path to the geotiff precipitation folder
         qpf_store_path {str} -- path to the folder where QPF files are stored
     """
+    # Normalize current time to timezone-aware UTC
+    current_datetime = _ensure_aware_utc(current_datetime)
     qpes = []
     qpfs = []
     older_QPE = current_datetime - timedelta(hours=9.5)
     imerg_Latency = current_datetime - timedelta(hours=4)
     
     try:
+        # Ensure store folder exists
+        os.makedirs(qpf_store_path, exist_ok=True)
         # List all precip files
         precip_files = os.listdir(precipFolder)
 
@@ -31,9 +45,10 @@ def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
         print("    Deleting all QPE files older than Fail Time: ", older_QPE)
         for qpe in qpes:
             try:
-                geotiff_datetime = get_geotiff_datetime(precipFolder + qpe)
-                if geotiff_datetime < older_QPE:
-                    os.remove(precipFolder + qpe)
+                qpe_path = os.path.join(precipFolder, qpe)
+                geotiff_datetime = _ensure_aware_utc(get_geotiff_datetime(qpe_path))
+                if geotiff_datetime is not None and geotiff_datetime < older_QPE:
+                    os.remove(qpe_path)
             except Exception as e:
                 print(f"Error processing QPE file {qpe}: {e}")
 
@@ -41,19 +56,21 @@ def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
         print("    Copying all QPF files older than Current Time: ", current_datetime, " into qpf_store folder.")
         for qpf in qpfs:
             try:
-                geotiff_datetime = get_geotiff_datetime(precipFolder + qpf)
-                if geotiff_datetime < current_datetime:
-                    shutil.copy2(precipFolder + qpf, qpf_store_path)
-                os.remove(precipFolder + qpf)
+                qpf_path = os.path.join(precipFolder, qpf)
+                geotiff_datetime = _ensure_aware_utc(get_geotiff_datetime(qpf_path))
+                if geotiff_datetime is not None and geotiff_datetime < current_datetime:
+                    shutil.copy2(qpf_path, qpf_store_path)
+                    os.remove(qpf_path)
             except Exception as e:
                 print(f"Error processing QPF file {qpf}: {e}")
 
         print(f"    Deleting all QPE files newer than Imerg Latency Time: {imerg_Latency} because it might be duplicated files")
         for qpedup in qpes:
             try:
-                geotiff_datetime = get_geotiff_datetime(precipFolder + qpedup)
-                if geotiff_datetime > current_datetime - timedelta(hours=4):
-                    os.remove(precipFolder + qpedup)
+                qpe_path = os.path.join(precipFolder, qpedup)
+                geotiff_datetime = _ensure_aware_utc(get_geotiff_datetime(qpe_path))
+                if geotiff_datetime is not None and geotiff_datetime > imerg_Latency:
+                    os.remove(qpe_path)
             except Exception as e:
                 print(f"Error processing QPE duplicate file {qpedup}: {e}")
 
@@ -63,9 +80,10 @@ def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
         max_qpf = current_datetime - timedelta(hours=4)
         for qpf_stored in qpf_stored_files:
             try:
-                qpf_datetime = get_geotiff_datetime(qpf_store_path + qpf_stored)
-                if qpf_datetime < max_qpf:
-                    os.remove(qpf_store_path + qpf_stored)
+                stored_path = os.path.join(qpf_store_path, qpf_stored)
+                qpf_datetime = _ensure_aware_utc(get_geotiff_datetime(stored_path))
+                if qpf_datetime is not None and qpf_datetime < max_qpf:
+                    os.remove(stored_path)
             except Exception as e:
                 print(f"Error processing stored QPF file {qpf_stored}: {e}")
     except Exception as e:

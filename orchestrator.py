@@ -21,7 +21,7 @@ import os
 from os import makedirs, listdir, rename, remove
 import glob
 from datetime import datetime as dt
-from datetime import timedelta
+from datetime import timedelta, timezone
 import numpy as np
 import re
 import subprocess
@@ -50,7 +50,7 @@ def main(args):
     NOWCAST = True 
     
     # Read the configuration file User should change this line if the configuration file has a different name
-    import westafrica1km_config as config_file
+    import Cuba_config as config_file
     print(">>> Config file loaded")
 
     #Configuration file
@@ -97,7 +97,7 @@ def main(args):
     if HindCastMode == True:
         currentTime = dt.strptime(HindCastDate, "%Y-%m-%d %H:%M")
     else:
-        currentTime = dt.datetime.now(dt.timezone.utc)
+        currentTime = dt.now(timezone.utc)
     
     # Round down the current minutess to the nearest 30min increment in the past (for 30 forecast)
     if systemTimestep == 30:
@@ -128,16 +128,16 @@ def main(args):
     EndLRTime = dt.strptime(config_file.EndLRTime,"%Y-%m-%d %H:%M")
     
     if HindCastMode and LR_run:
-        systemEndTime = EndLRTime + timedelta(hours=4) #4 hours dry
+        systemEndTime = EndLRTime + timedelta(hours=6) #4 hours dry
     if HindCastMode and not LR_run:
         systemEndTime = currentTime + timedelta(hours=6) #4 hours dry after ml
     #operational options
     if not HindCastMode and LR_run:
-        systemStartLRTime = currentTime + timedelta(hours=2) #change as desired
-        EndLRTime = currentTime + timedelta(hours=6) #4 hours of qpf
-        systemEndTime = EndLRTime + timedelta(hours=4) #4 hours dry after gfs
+        systemStartLRTime = currentTime #change as desired [removed + timedelta(hours=2) as we have GFS so LR can be same as current time ]
+        EndLRTime = currentTime + timedelta(hours=24) #4 hours of qpf
+        systemEndTime = EndLRTime + timedelta(hours=6) #4 hours dry after gfs
     if not HindCastMode and not LR_run:
-        systemEndTime = currentTime + timedelta(hours=6) #si no corro gfs y hindcast no
+        systemEndTime = currentTime + timedelta(hours=6) #si no corro gfs y hindcast no 
         
     ###-------------------------- START ROUTINES --------------------------------
     try:
@@ -155,14 +155,16 @@ def main(args):
         newline(1)
         print("***_________IMERG files are complete in precip folder_________***")
         newline(2)
-    except:
-        print("There was a problem with the QPE routines. Ignoring errors and continuing with execution")
+    except Exception as e:
+        import traceback
+        print(f"There was a problem with the QPE routines: {e}. Ignoring errors and continuing with execution")
+        traceback.print_exc()
         
     ###-------------------------- START NOWCAST SECTION --------------------------------      
     if NOWCAST:
         try:
             #if true, will create a nowcast filling the last 4 hours of imerge latency + 2hours of nowcast 
-            print(f"***_________Generating the nowcast from {currentTime - timedelta(hours=3.5)} to {currentTime + timedelta(hours=2.5)}_________***")
+            print(f"***_________Generating the nowcast from {currentTime - timedelta(hours=3.5)} to {currentTime}_________***")
             run_convlstm(currentTime, precipFolder, nowcast_model_name, xmin, ymin, xmax, ymax)
             newline(1)
             print("***_________Nowcast/ML files are complete in precip folder_________***")
@@ -172,18 +174,19 @@ def main(args):
             
     ###-------------------------- START LR-QPF SECTION --------------------------------
     if LR_run:
-        print(f"***_________Preparing QPF from {systemStartLRTime} to {systemEndTime}")
+        # When in LR mode, use GFS for the 24-hour forecast period only
+        # The 4-hour gap is filled by nowcast above
+        print(f"***_________Preparing GFS QPF for 24-hour forecast from {systemStartLRTime} to {EndLRTime}_________***")
+        print(f"    Gap-filling (4 hours ago to current time) is handled by nowcast above")
+        print(f"    GFS provides 24-hour forecast from current time onwards")
         try:
-            #looking for files on archive and copy the needed ones on qpf_store/gfs_data
+            # GFS download for the 24-hour forecast period
             GFS_searcher(GFS_archive_path, qpf_store_path, systemStartLRTime, EndLRTime, xmin, xmax, ymin, ymax)
-            
-            # #TO USE WRF FILES DEFINE:
-            # var_name = "PREC_ACC_C"
-            # filename_template = "PREC_d01_YYYY-MM-DD_HH_mm_SS.nc"
-            # WRF_archive_path = config_file.QPF_archive_path
-            # WRF_searcher(WRF_archive_path, qpf_store_path, systemStartLRTime, EndLRTime, LR_timestep, var_name, filename_template)
-        except:
-            ("There was a problem with the QPF routines. Ignoring errors and continuing with execution")
+            newline(1)
+            print("***_________GFS forecast files are complete_________***")
+        except Exception as e:
+            print(f"There was a problem with the GFS routines: {e}. Ignoring errors and continuing with execution")
+        
         newline(1)
         print("***_________All QPE + QPF files are ready in local folder_________***")
     newline(2)
@@ -201,7 +204,9 @@ def main(args):
     
     print("***_________EF5 is ready to be run_________***")
     
-    run_ef5_simulation(ef5Path, tmpOutput, controlFile)
+    # Use orchestrator's currentTime to timestamp outputs/logs
+    output_timestamp_str = currentTime.strftime("%Y%m%d.%H%M%S")
+    run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str)
     newline(2)
     print("******** EF5 Outputs are ready!!! ********")
              

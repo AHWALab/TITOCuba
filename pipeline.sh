@@ -4,11 +4,11 @@
 
 # 1. Prepare the Environment for the run
 source /Users/vrobledodelgado/miniconda3/etc/profile.d/conda.sh
-conda activate tito_env
+conda activate /Dedicated/Humberto/TITO/env/tito_env
 
 # 2. Run orchestrator
 
-python3 orchestrator.py westafrica1km_config.py
+python3 orchestrator.py Cuba_config.py
 
 conda deactivate
 

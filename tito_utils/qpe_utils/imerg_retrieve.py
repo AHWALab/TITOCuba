@@ -8,13 +8,23 @@ import requests
 from bs4 import BeautifulSoup
 import datetime
 from datetime import datetime as dt
-from datetime import timedelta
+from datetime import timedelta, timezone
 from os import makedirs, listdir, rename, remove
 import numpy as np
 import osgeo.gdal as gdal
 from osgeo.gdal import gdalconst
 from osgeo.gdalconst import GA_ReadOnly
 from tito_utils.file_utils.datetime_utils import extract_timestamp, extract_datetime_from_filename
+
+def _ensure_aware_utc(dt_value):
+    if dt_value is None:
+        return None
+    if isinstance(dt_value, datetime.datetime):
+        if dt_value.tzinfo is None or dt_value.tzinfo.utcoffset(dt_value) is None:
+            return dt_value.replace(tzinfo=timezone.utc)
+        return dt_value.astimezone(timezone.utc)
+    return dt_value
+
 
 def retrieve_imerg_files(url, email_gpm, HindCastMode, date):
     if HindCastMode:
@@ -25,21 +35,30 @@ def retrieve_imerg_files(url, email_gpm, HindCastMode, date):
         url_server = url + '/' + folder
         
     # Send a GET request to the URL
-    response = requests.get(url_server, auth=(email_gpm, email_gpm))
+    try:
+        response = requests.get(url_server, auth=(email_gpm, email_gpm), timeout=60)
+    except Exception as e:
+        print(f"Failed to request IMERG directory listing: {e}")
+        return []
 
     # Check if the request was successful
-    if response.status_code == 200:
-        # Parse the content of the response with BeautifulSoup
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # Find all links on the page
-        links = soup.find_all('a')
-
-        # Extract file names from the links
-        files = [link.get('href') for link in links if link.get('href').endswith('30min.tif')]
-    else:
+    if response.status_code != 200:
         print(f"Failed to retrieve the directory listing. Status code: {response.status_code}")
-        
+        return []
+
+    # Parse the content of the response with BeautifulSoup
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Find all links on the page
+    links = soup.find_all('a')
+
+    # Extract file names from the links, guarding against None hrefs
+    files = []
+    for link in links:
+        href = link.get('href')
+        if href and href.endswith('30min.tif'):
+            files.append(href)
+    
     return files 
 
 
@@ -171,17 +190,18 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
     tif_files = [f for f in files_folder if "qpe" in f]
     
     #the first hour of nowcast files will be current time - 3.5h
+    current_timestamp = _ensure_aware_utc(current_timestamp)
     nowcast_older = current_timestamp - timedelta(hours = 3.5) #This is the first nowcast file to be created 
     
     if tif_files:
         print("    There are IMERG files in the precip folder")
         # Extract the most recent date from files
         latest_date = max(tif_files, key=lambda x: datetime.datetime.strptime(x[10:22], '%Y%m%d%H%M')) #to improve 
-        formatted_latest_pptfile = datetime.datetime.strptime(latest_date[10:22], '%Y%m%d%H%M') #last file on imerg precip
+        formatted_latest_pptfile = datetime.datetime.strptime(latest_date[10:22], '%Y%m%d%H%M').replace(tzinfo=timezone.utc) #last file on imerg precip
         #if the latest imerg file in folder corresponds to the older nowcast file (current time - 4h)
         if formatted_latest_pptfile < nowcast_older:
             # and if the time difference betwen the current timestep and the latest imerg in folder is less than 30 min.
-            if nowcast_older - formatted_latest_pptfile <= timedelta(minutes=60):
+            if (nowcast_older - formatted_latest_pptfile) <= timedelta(minutes=60):
                 print(f"    There are less than 60 min between last imerg file available on folder: {formatted_latest_pptfile} and last imerg file on server: ", nowcast_older-timedelta(minutes=30))
                 #List the missing dates between lastest ppt file and current timestep -4h
                 missing_dates = []
@@ -193,7 +213,7 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
                 for date in missing_dates:
                     #Verifying if missing dates are on the GPM server.
                     server_files = retrieve_imerg_files(ppt_server_path, email, HindCastMode, date)
-                    timestamps = [extract_timestamp(file) for file in server_files]
+                    timestamps = [extract_timestamp(file).replace(tzinfo=timezone.utc) for file in server_files]
                     if date in timestamps:
                         print("    Downloading the last file of precip data")
                         #downloading the file 
@@ -209,11 +229,9 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
                             if formatted_date in filename:
                                 source_file = os.path.join(qpf_store_path, filename)
                                 destination_file = os.path.join(precipFolder, filename)
-                                # Copiar el archivo al directorio de destino
                                 shutil.copy2(source_file, destination_file)
                                 print(f"    File '{filename}' was copied in '{precipFolder}'")
-                            else:   
-                                break                          
+                                break
             else: 
                 print(f"    There's more than a 60 min gap between latency Imerg: {nowcast_older-timedelta(minutes=30)} and the latest geoTIFF file {formatted_latest_pptfile}")
                 print("    Latest Geotiff file available in folder:", formatted_latest_pptfile)
@@ -233,7 +251,7 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
                 for date in missing_dates: 
                     #retrieven file names from GPM server
                     server_files = retrieve_imerg_files(ppt_server_path, email, HindCastMode, date)    
-                    timestamps = [extract_timestamp(file) for file in server_files]
+                    timestamps = [extract_timestamp(file).replace(tzinfo=timezone.utc) for file in server_files]
                     
                     #Looking for timestaps missing in imerg
                     if date not in timestamps:
@@ -245,10 +263,8 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
                             if formatted_date in filename:
                                 source_file = os.path.join(qpf_store_path, filename)
                                 destination_file = os.path.join(precipFolder, filename)
-                                # Copying file to precip folder
                                 shutil.copy2(source_file, destination_file)
                                 print(f"    File '{filename}' was copied in '{precipFolder}'")
-                            else:
                                 break
                     #if date is in timestaps, file is available.    
     else:
@@ -269,14 +285,14 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
         #retrieving gpm files for the last file that it is supposed to be downloaded.
         date_in_server = nowcast_older- timedelta(minutes=30)
         server_files = retrieve_imerg_files(ppt_server_path, email, HindCastMode, date_in_server)
+        # print(f"    Server files: {server_files}")
 
         while next_timestamp < nowcast_older:
             missing_dates.append(next_timestamp)
             next_timestamp += timedelta(minutes=30)
             
             for date in missing_dates:     
-                timestamps = [extract_timestamp(file) for file in server_files]
-                
+                timestamps = [extract_timestamp(file).replace(tzinfo=timezone.utc) for file in server_files]
                 if date not in timestamps:
                     print(f"    File {date} is missing")
                     print("    Copying the corresponding file from nowcast store folder")
@@ -285,10 +301,8 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
                         if formatted_date in filename:
                             source_file = os.path.join(qpf_store_path, filename)
                             destination_file = os.path.join(precipFolder, filename)
-                            # Copying file to precip folder
                             shutil.copy2(source_file, destination_file)
                             print(f"    File '{filename}' was copied in '{precipFolder}'")
-                        else:
                             break
                     """
                     print(f"   There is no file in qpf store with date: '{formatted_date}'") ### TO DO

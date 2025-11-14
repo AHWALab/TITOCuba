@@ -1,0 +1,94 @@
+###############################################
+# Global policy: ignore everything by default #
+###############################################
+/*
+
+# Keep the ignore file itself
+!.gitignore
+
+###############################################
+# Allow only these top-level files            #
+###############################################
+!Cuba_config.py
+!orchestrator.py
+!pipeline.sh
+!setup_tito.sh
+!README.md
+!tito_env.yml
+
+###############################################
+# Allow only these top-level directories      #
+###############################################
+!basic/
+!basic/**
+
+!Nowcast/
+!Nowcast/**
+
+!outputs/
+!outputs/**
+
+!parameters/
+!parameters/**
+
+!pet/
+!pet/**
+
+!precip/
+!precip/**
+
+!qpf_store/
+!qpf_store/**
+
+!states/
+!states/**
+
+!templates/
+!templates/**
+
+!tito_utils/
+!tito_utils/**
+
+###############################################
+# Always ignore transient/cached files        #
+###############################################
+# Python bytecode and caches (even inside allowed dirs)
+**/__pycache__/
+**/*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.env
+.venv/
+venv/
+.env*/
+
+# Jupyter notebook checkpoints
+**/.ipynb_checkpoints/
+
+# Editor/OS clutter
+.vscode/
+*.swp
+*.log
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.gz
+
+# Notes:
+# - The policy above ensures ONLY the whitelisted folders/files are tracked.
+# - To apply this strictly if items are already tracked, run:
+#     git rm -r --cached .
+#     git add .
+#     git commit -m "Restrict repo to whitelisted paths; ignore all else"
