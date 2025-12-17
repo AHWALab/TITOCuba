@@ -30,12 +30,39 @@ from tito_utils.file_utils import cleanup_precip, newline
 from tito_utils.qpe_utils import get_new_precip
 from tito_utils.qpf_utils import run_convlstm, download_GFS, GFS_searcher, WRF_searcher 
 from tito_utils.ef5 import prepare_ef5, run_ef5_simulation
+from tito_utils.highres_utils import prepare_highres_control
 print(">>> Modules imported")
 
 """
 Setup Environment Variables for Linux Shared Libraries and OpenMP Threads (PARA USAR ML de AGRHYMET)
 
 """
+
+def _sync_highres_states(source_path, target_path, state_names):
+    """Copy the subset of low-res state files needed by the 25 m rerun."""
+    if not state_names:
+        return 0
+    os.makedirs(target_path, exist_ok=True)
+    copied = 0
+    for state in state_names:
+        pattern = os.path.join(source_path, f"{state}_*.tif")
+        for src_file in glob.glob(pattern):
+            dest_file = os.path.join(target_path, os.path.basename(src_file))
+            if os.path.abspath(src_file) == os.path.abspath(dest_file):
+                continue
+            try:
+                if (not os.path.exists(dest_file) or
+                        os.path.getmtime(src_file) > os.path.getmtime(dest_file)):
+                    copy(src_file, dest_file)
+                    copied += 1
+            except Exception as exc:
+                print(f"    Warning: unable to copy state {src_file} -> {dest_file}: {exc}")
+    if copied:
+        print(f"    Synced {copied} high-res state file(s) into {target_path}")
+    else:
+        print("    No new high-res state files needed for this cycle.")
+    return copied
+
 
 def main(args):
     """Main function of the script.
@@ -66,14 +93,25 @@ def main(args):
     ef5Path = config_file.ef5Path
     precipFolder = config_file.precipFolder
     statesPath = config_file.statesPath
+    statesHighResPath = getattr(config_file, "statesHighResPath", statesPath)
     precipEF5Folder = config_file.precipEF5Folder
     modelStates = config_file.modelStates
+    highres_state_models = getattr(config_file, "highres_state_models", ["crest_SM", "kwr_IR"])
     templatePath = config_file.templatePath
     template = config_file.templates
     nowcast_model_name = config_file.nowcast_model_name
     dataPath = config_file.dataPath
     qpf_store_path = config_file.qpf_store_path
     tmpOutput = config_file.tmpOutput
+    run_highres = getattr(config_file, "run_highres", False)
+    highres_threshold = getattr(config_file, "highres_threshold", None)
+    highres_template = getattr(config_file, "highres_template", template)
+    highres_maskgrid = getattr(config_file, "highres_maskgrid", None)
+    highres_gauge_list = getattr(config_file, "highres_gauge_list", None)
+    highres_resolution_tag = getattr(config_file, "highres_resolution_tag", "25m")
+    highres_min_gauges = getattr(config_file, "highres_min_gauges", 1)
+    highres_dataPath = getattr(config_file, "highres_dataPath", dataPath)
+    highres_tmpOutput = getattr(config_file, "highres_tmpOutput", tmpOutput)
     SEND_ALERTS = config_file.SEND_ALERTS
     alert_recipients = config_file.alert_recipients
     HindCastMode = config_file.HindCastMode
@@ -108,10 +146,10 @@ def main(args):
     currentTime = currentTime.replace(minute=minutes, second=0, microsecond=0)
     
     if HindCastMode == True:
-        print(f"*** Starting hindcast run cycle at {currentTime.strftime("%Y-%m-%d_%H:%M")} UTC ***")
+        print(f"*** Starting hindcast run cycle at {currentTime.strftime('%Y-%m-%d_%H:%M')} UTC ***")
         newline(2)
     else:
-        print(f"*** Starting real-time run cycle at {currentTime.strftime("%Y-%m-%d_%H:%M")} UTC ***")
+        print(f"*** Starting real-time run cycle at {currentTime.strftime('%Y-%m-%d_%H:%M')} UTC ***")
         newline(2) 
         
     # Configure the system to run once every hour
@@ -199,8 +237,8 @@ def main(args):
         subdomain, systemModel, templatePath, template, systemStartLRTime, 
         systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run)
     
-    print(f"    Running simulation system for: {currentTime.strftime("%Y%m%d_%H%M")}")
-    print(f"    Simulations start at: {realSystemStartTime.strftime("%Y%m%d_%H%M")} and ends at: {systemEndTime.strftime("%Y%m%d_%H%M")} while state update ends at: {systemStateEndTime.strftime("%Y%m%d_%H%M")}")
+    print(f"    Running simulation system for: {currentTime.strftime('%Y%m%d_%H%M')}")
+    print(f"    Simulations start at: {realSystemStartTime.strftime('%Y%m%d_%H%M')} and ends at: {systemEndTime.strftime('%Y%m%d_%H%M')} while state update ends at: {systemStateEndTime.strftime('%Y%m%d_%H%M')}")
     
     print("***_________EF5 is ready to be run_________***")
     
@@ -209,10 +247,88 @@ def main(args):
     run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str)
     newline(2)
     print("******** EF5 Outputs are ready!!! ********")
+
+    if run_highres:
+        maxunitq_path = os.path.join(tmpOutput, f"maxunitq.{output_timestamp_str}.tif")
+        highres_template_path = os.path.join(templatePath, highres_template)
+        prerequisites = []
+        if not highres_maskgrid:
+            prerequisites.append("mask grid path not set")
+        elif not os.path.exists(highres_maskgrid):
+            prerequisites.append(f"mask grid missing ({highres_maskgrid})")
+        if not highres_gauge_list:
+            prerequisites.append("gauge list path not set")
+        elif not os.path.exists(highres_gauge_list):
+            prerequisites.append(f"gauge list missing ({highres_gauge_list})")
+        if not os.path.exists(highres_template_path):
+            prerequisites.append(f"high-res template missing ({highres_template_path})")
+
+        if prerequisites:
+            print("High-res EF5 rerun skipped due to configuration issues:")
+            for issue in prerequisites:
+                print(f"    - {issue}")
+        else:
+            selection = None
+            try:
+                selection = prepare_highres_control(
+                    maxunitq_path=maxunitq_path,
+                    mask_grid_path=highres_maskgrid,
+                    gauge_list_path=highres_gauge_list,
+                    template_path=highres_template_path,
+                    threshold=highres_threshold,
+                    gauge_name_prefix=f"{subdomain}_{highres_resolution_tag}",
+                )
+            except Exception as exc:
+                print(f"High-res preprocessing failed: {exc}")
+
+            selected_count = selection.count if selection else 0
+            if selection and selected_count >= max(1, highres_min_gauges):
+                newline(1)
+                print(f"***_________Preparing the high-resolution EF5 run ({selected_count} gauges)_________***")
+                _sync_highres_states(statesPath, statesHighResPath, highres_state_models)
+                hr_real_start, hr_control_file = prepare_ef5(
+                    precipEF5Folder,
+                    precipFolder,
+                    statesHighResPath,
+                    highres_state_models,
+                    systemStartTime,
+                    failTime,
+                    currentTime,
+                    systemName,
+                    SEND_ALERTS,
+                    alert_recipients,
+                    smtp_config,
+                    highres_tmpOutput,
+                    highres_dataPath,
+                    subdomain,
+                    systemModel,
+                    templatePath,
+                    highres_template,
+                    systemStartLRTime,
+                    systemWarmEndTime,
+                    systemStateEndTime,
+                    systemEndTime,
+                    LR_TimeStep,
+                    LR_run,
+                )
+                print(f"    Running high-res simulation with {highres_resolution_tag} grids")
+                run_ef5_simulation(
+                    ef5Path,
+                    highres_tmpOutput,
+                    hr_control_file,
+                    output_timestamp_str,
+                    resolution_tag=highres_resolution_tag,
+                )
+                newline(1)
+                print("******** High-resolution EF5 Outputs are ready!!! ********")
+            else:
+                print(
+                    f"High-res EF5 rerun skipped (selected {selected_count} gauge(s), "
+                    f"needs at least {highres_min_gauges})."
+                )
              
 """
 Run the main() function when invoked as a script
 """
 if __name__ == "__main__":
     main(sys.argv)
-

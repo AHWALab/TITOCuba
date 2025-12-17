@@ -2,6 +2,15 @@
 """
 Herbie-based GFS precipitation downloader and GeoTIFF converter.
 
+Quick usage guide:
+- Activate the conda environment:
+  `conda activate tito_env`
+- One-shot/parameterized run:  
+  `python gfs_downloader.py --start "2025-12-01 00" --end "2025-12-03 00" --xmin -85 --xmax -74 --ymin 19 --ymax 26 --out /path/to/output`
+- Continuous auto mode (polls for latest cycle, uses defaults defined below):  
+  `python gfs_downloader.py   cd /home/nammehta/TITOV2Cuba/tito_utils/qpf_utils
+  `python gfs_downloader.py --out /home/nammehta/TITOV2Cuba/precip/GFS/GFSData ` or `python gfs_downloader.py --auto-once` for a single pass.
+
 This module exposes a single function `download_GFS(systemStartLRTime, systemEndTime, xmin, xmax, ymin, ymax, qpf_store_path)`
 that downloads GFS precipitation rate (PRATE) for a given model run start time and a requested
 time window, converts rate to precipitation amount per time step (rate × Δt), clips to the given
@@ -47,9 +56,9 @@ except Exception as exc:  # pragma: no cover - provide a clearer import error
 # --------------------
 # Auto mode defaults (edit these to customize)
 # --------------------
-# Default output folder for auto mode (when running script without CLI params)
+# Default output folder for auto mode (override via --auto-out or _auto_mode(out_dir=...))
 # Default absolute output directory for auto mode
-AUTO_OUT_DIR = "/home/naman/labWork/cuba/TITOV2Cuba/precip/GFS/GFSData"
+AUTO_OUT_DIR = ""
 
 # Default auto mode spatial bbox (lon/lat). Edit as needed.
 # Using global by default; set to your region for smaller files.
@@ -59,7 +68,7 @@ AUTO_BBOX = (-180.0, 180.0, -90.0, 90.0)  # (xmin, xmax, ymin, ymax)
 AUTO_HOURS = 120  # hourly to +120
 
 # Poll frequency in seconds for auto mode
-AUTO_POLL_SECONDS = 300  # 5 minutes
+AUTO_POLL_SECONDS = 3600  # 1 hour
 
 # Grace period after a new cycle starts before targeting it (minutes)
 AUTO_CYCLE_GRACE_MINUTES = 120
@@ -486,7 +495,7 @@ def _auto_mode(
     hours: Optional[int] = None,
     poll_seconds: Optional[int] = None,
     one_shot: bool = False,
-) -> None:
+) -> int:
     """Continuously download the latest GFS cycle as it becomes available.
 
     - Does not fall back to previous cycles; it waits/polls for the latest cycle.
@@ -500,12 +509,13 @@ def _auto_mode(
     os.makedirs(out_dir, exist_ok=True)
     last_cycle: Optional[datetime] = None
 
+    total_written_overall = 0
     while True:
         try:
             now_utc = datetime.utcnow()
             latest = _latest_cycle_now()
             # choose target cycle using grace window
-            if now_utc < latest + timedelta(minutes=AUTO_CYCLE_GRACE_MINUTES):
+            if now_utc <= latest + timedelta(minutes=AUTO_CYCLE_GRACE_MINUTES):
                 target_cycle = latest - timedelta(hours=6)
                 sys.stderr.write(
                     f"Auto mode: within {AUTO_CYCLE_GRACE_MINUTES} min of latest cycle {latest:%Y-%m-%d %H}; targeting previous cycle {target_cycle:%Y-%m-%d %H}.\n"
@@ -573,6 +583,7 @@ def _auto_mode(
                         except Exception:
                             pass
                         last_cycle = target_cycle
+                        total_written_overall = len(staged)
                         sys.stderr.write(
                             f"Auto mode: staged {len(staged)} files. Cleared {out_dir} and promoted staged files for cycle {target_cycle:%Y-%m-%d %H}.\n"
                         )
@@ -583,6 +594,67 @@ def _auto_mode(
                     sys.stderr.write(
                         f"Auto mode: no files available yet for cycle {target_cycle:%Y-%m-%d %H}. Will retry later without clearing {out_dir}.\n"
                     )
+                    # In one-shot mode, attempt a single fallback to previous cycle immediately
+                    if one_shot:
+                        try:
+                            prev_cycle = target_cycle - timedelta(hours=6)
+                            prev_start = prev_cycle
+                            prev_end = prev_cycle + timedelta(hours=hours)
+                            sys.stderr.write(
+                                f"Auto mode (one-shot): attempting fallback to previous cycle {prev_cycle:%Y-%m-%d %H}.\n"
+                            )
+                            # ensure staging is empty
+                            try:
+                                if os.path.isdir(staging_dir):
+                                    for name in os.listdir(staging_dir):
+                                        try:
+                                            os.remove(os.path.join(staging_dir, name))
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                pass
+                            staged_prev = download_GFS(
+                                systemStartLRTime=prev_start,
+                                systemEndTime=prev_end,
+                                xmin=xmin,
+                                xmax=xmax,
+                                ymin=ymin,
+                                ymax=ymax,
+                                qpf_store_path=staging_dir,
+                                max_cycles_back=0,
+                                force_cycle_start=prev_cycle,
+                                allow_previous_cycle_fallback=False,
+                                clear_between_attempts=False,
+                            )
+                            if len(staged_prev) > 0:
+                                try:
+                                    if os.path.isdir(out_dir):
+                                        for name in os.listdir(out_dir):
+                                            if name.startswith("gfs.") and name.endswith(".tif"):
+                                                try:
+                                                    os.remove(os.path.join(out_dir, name))
+                                                except Exception:
+                                                    pass
+                                    for name in os.listdir(staging_dir):
+                                        src = os.path.join(staging_dir, name)
+                                        dst = os.path.join(out_dir, name)
+                                        try:
+                                            shutil.move(src, dst)
+                                        except Exception:
+                                            pass
+                                    try:
+                                        os.rmdir(staging_dir)
+                                    except Exception:
+                                        pass
+                                    last_cycle = prev_cycle
+                                    total_written_overall = len(staged_prev)
+                                    sys.stderr.write(
+                                        f"Auto mode (one-shot): promoted {len(staged_prev)} files for fallback cycle {prev_cycle:%Y-%m-%d %H}.\n"
+                                    )
+                                except Exception as e:
+                                    sys.stderr.write(f"Auto mode: error promoting staged fallback files: {e}\n")
+                        except Exception as e:
+                            sys.stderr.write(f"Auto mode: fallback error: {e}\n")
             else:
                 # Same cycle: top-up directly in out_dir
                 sys.stderr.write(
@@ -604,18 +676,19 @@ def _auto_mode(
                 sys.stderr.write(
                     f"Auto mode: wrote {len(written)} files for cycle {target_cycle:%Y-%m-%d %H}.\n"
                 )
+                total_written_overall = len(written)
         except Exception as e:
             sys.stderr.write(f"Auto mode error: {e}\n")
 
         # Exit immediately in one-shot mode; otherwise sleep and continue polling
         if one_shot:
-            break
+            return total_written_overall
         try:
             import time
             time.sleep(poll)
         except KeyboardInterrupt:
             sys.stderr.write("Auto mode stopped by user.\n")
-            break
+            return total_written_overall
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry
@@ -633,9 +706,16 @@ if __name__ == "__main__":  # pragma: no cover - CLI entry
         )
         print(f"Wrote {len(written)} files to {args.out}")
     else:
-        _auto_mode(
+        wrote = _auto_mode(
             out_dir=args.auto_out,
             hours=args.auto_hours,
             poll_seconds=args.poll_seconds,
             one_shot=getattr(args, "auto_once", False),
         )
+        # In one-shot mode, set exit code to non-zero if nothing was written
+        if getattr(args, "auto_once", False):
+            try:
+                import sys as _sys
+                _sys.exit(0 if wrote > 0 else 2)
+            except SystemExit:
+                raise

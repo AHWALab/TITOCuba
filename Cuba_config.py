@@ -12,16 +12,30 @@ ymin = 3.5
 ymax = 39.5
 nowcast_model_name = "convlstm" 
 systemName = systemModel.upper() + " " + domain.upper() + " " + subdomain.upper()
-ef5Path = "/home/naman/EF5UnitStreamCSV/EF5/bin/ef5"
+ef5Path = "/home/nammehta/EF5V1.2.6/EF5V1.2.6/bin/ef5"
 statesPath = "states/"
+statesHighResPath = "statesHighRes/"
 precipFolder = "precip/"
 precipEF5Folder = "precipEF5/"
 modelStates = ["crest_SM", "kwr_IR", "kwr_pCQ", "kwr_pOQ"]
+highres_state_models = ["crest_SM", "kwr_IR"]
 templatePath = "templates/"
 templates = "ef5_control_template.txt"
 dataPath = "outputs/"
 qpf_store_path = 'qpf_store/'
 tmpOutput = dataPath + "tmp_output_" + systemModel + "/"
+
+# High-resolution EF5 rerun settings
+run_highres = True
+highres_threshold = 1.0  # maxunitq threshold to trigger 25m rerun
+highres_template = "ef5_control_highRes_templeate.txt"
+highres_maskgrid = "basic/maskgrid.tif"
+highres_gauge_list = "templates/25mGaugeList.txt"
+highres_resolution_tag = "25m"
+highres_min_gauges = 1
+highres_dataPath = "outputs_25m/"
+highres_tmpOutput = highres_dataPath + "tmp_output_" + systemModel + "_25m/"
+
 
 #Alerts configuration
 SEND_ALERTS = False
@@ -38,18 +52,18 @@ copyToWeb = False
 If Hindcast and LR_mode is True, user MUST define StartLRtime, EndLRTime, LR_timestep,GFS_archive_path
 If running in operational mode (Hindcast False) and LR_mode = True, user only have to define LR_timestep, GFS_archive_path
 """
-HindCastMode = True
-HindCastDate = "2023-06-11 00:00" #"%Y-%m-%d %H:%M" UTC
+HindCastMode = False
+HindCastDate = "2023-06-09 00:00" #"%Y-%m-%d %H:%M" UTC
 
 run_LR = True
-StartLRtime = "2023-06-11 00:00" #"%Y-%m-%d %H:%M" UTC. Date of first QPF file
-EndLRTime = "2023-06-12 00:00" #"%Y-%m-%d %H:%M" UTC. Date of last QPF file
+StartLRtime = "2023-06-09 00:00" #"%Y-%m-%d %H:%M" UTC. Date of first QPF file
+EndLRTime = "2023-06-10 00:00" #"%Y-%m-%d %H:%M" UTC. Date of last QPF file
 LR_timestep = "60u"
 # Path to archived GFS GeoTIFFs used by LR/QPF. Must point to the in-repo folder
 # that actually contains the files (see precip/GFS/GFSData/ in this repo).
 # Use a path relative to the orchestrator working directory (repo root) or set
 # an absolute path if you run from elsewhere.
-QPF_archive_path = "precip/GFS/GFSData/"
+QPF_archive_path = "precip/GFS"
 
 # Email associated to GPM account
 email_gpm = 'vrobledodelgado@uiowa.edu'

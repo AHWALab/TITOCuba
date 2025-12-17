@@ -56,7 +56,7 @@ def netcdf_to_geotiff(file_nc, qpf_store_folder, var_name):
     da.rio.write_nodata(-9999, inplace=True)
     da = da.rio.set_spatial_dims(x_dim="lon", y_dim="lat")
     # Save as GeoTIFF
-    da.rio.to_raster(f"{qpf_store_folder}/{os.path.basename(file_nc)[:-len(".nc")]}.tif")
+    da.rio.to_raster(f"{qpf_store_folder}/{os.path.basename(file_nc)[:-len('.nc')]}.tif")
     ds.close()
 
 def WRF_searcher(path_wrf, qpf_store_path, start_time, end_time, LR_timestep, var_name, filename_template):

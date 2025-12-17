@@ -7,6 +7,7 @@ import datetime
 from datetime import timedelta
 from multiprocessing.pool import ThreadPool
 import subprocess
+from typing import Optional
 from tito_utils.file_utils.file_handling import is_non_zero_file, mkdir_p
 from tito_utils.ef5.alerts import send_mail
 
@@ -191,14 +192,24 @@ def run_EF5(ef5Path, hot_folder_path, control_file, log_file):
     subprocess.call(ef5Path + " " + control_file + " > " + hot_folder_path + log_file, shell=True)
 
 
-def _rename_outputs_with_timestamp(hot_folder_path: str, timestamp_str: str) -> None:
+def _compose_output_path(base_path: str, timestamp_str: str, extension: str, resolution_tag: Optional[str]) -> str:
+    """Build a standardized filename that optionally includes a resolution tag."""
+    safe_tag = ""
+    if resolution_tag:
+        safe_tag = re.sub(r"[^0-9A-Za-z_-]", "", resolution_tag.strip())
+    if safe_tag:
+        return f"{base_path}.{safe_tag}.{timestamp_str}{extension}"
+    return f"{base_path}.{timestamp_str}{extension}"
+
+
+def _rename_outputs_with_timestamp(hot_folder_path: str, timestamp_str: str, resolution_tag: Optional[str] = None) -> None:
     """Rename EF5 outputs in the hot folder to use a unified timestamp.
 
     - maxq.*, maxunitq.*, qpeaccum.*, qpfaccum.* -> base.{timestamp}.tif
     - ts.*.csv -> ts.*.{timestamp}.csv
     Log file naming is handled via the EF5 invocation (redirect target).
     """
-    bases = ["maxq", "maxunitq", "qpeaccum", "qpfaccum", "maxsm"]
+    bases = ["maxq", "maxunitq", "qpeaccum", "qpfaccum", "maxsm", "maxdepth"]
     for base in bases:
         pattern = os.path.join(hot_folder_path, f"{base}.*.tif")
         matches = sorted(glob.glob(pattern))
@@ -206,7 +217,9 @@ def _rename_outputs_with_timestamp(hot_folder_path: str, timestamp_str: str) -> 
             continue
         # Prefer the newest file in case multiple exist
         latest = max(matches, key=lambda p: os.path.getmtime(p))
-        new_name = os.path.join(hot_folder_path, f"{base}.{timestamp_str}.tif")
+        new_name = _compose_output_path(
+            os.path.join(hot_folder_path, base), timestamp_str, ".tif", resolution_tag
+        )
         try:
             if os.path.abspath(latest) != os.path.abspath(new_name):
                 if os.path.exists(new_name):
@@ -218,7 +231,7 @@ def _rename_outputs_with_timestamp(hot_folder_path: str, timestamp_str: str) -> 
     # Timeseries CSVs
     for csv_path in glob.glob(os.path.join(hot_folder_path, "ts.*.csv")):
         root, ext = os.path.splitext(csv_path)
-        new_name = f"{root}.{timestamp_str}{ext}"
+        new_name = _compose_output_path(root, timestamp_str, ext, resolution_tag)
         try:
             if os.path.abspath(csv_path) != os.path.abspath(new_name):
                 if os.path.exists(new_name):
@@ -228,7 +241,7 @@ def _rename_outputs_with_timestamp(hot_folder_path: str, timestamp_str: str) -> 
             print(f"Warning: could not rename {csv_path} -> {new_name}: {e}")
 
 
-def run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str):
+def run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str, resolution_tag: Optional[str] = None):
     # Use timestamped log name
     log_name = f"ef5.{output_timestamp_str}.log"
     args = [ef5Path, tmpOutput, controlFile, log_name]
@@ -238,7 +251,7 @@ def run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str):
     tp.join()
 
     # Rename generated outputs to use the requested timestamp
-    _rename_outputs_with_timestamp(tmpOutput, output_timestamp_str)
+    _rename_outputs_with_timestamp(tmpOutput, output_timestamp_str, resolution_tag)
 
     # cleaning EF5 precipitation for next cycle
     for f in glob.glob("precipEF5/*"):
