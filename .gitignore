@@ -50,6 +50,15 @@
 !tito_utils/**
 
 ###############################################
+# Block heavy raster outputs                   #
+###############################################
+basic/**/*.tif
+precip/**/*.tif
+qpf_store/**/*.tif
+states/**/*.tif
+statesHighRes/**/*.tif
+
+###############################################
 # Always ignore transient/cached files        #
 ###############################################
 # Python bytecode and caches (even inside allowed dirs)
