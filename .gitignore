@@ -27,6 +27,9 @@
 
 !outputs/
 !outputs/**
+!outputs_25m/
+!outputs_25m/**
+
 
 !parameters/
 !parameters/**
@@ -36,12 +39,17 @@
 
 !precip/
 !precip/**
+!precipEF5/
+!precipEF5/**
+
 
 !qpf_store/
 !qpf_store/**
 
 !states/
 !states/**
+!statesHighRes/
+!statesHighRes/**
 
 !templates/
 !templates/**
