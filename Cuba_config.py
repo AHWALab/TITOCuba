@@ -12,7 +12,7 @@ ymin = 3.5
 ymax = 39.5
 nowcast_model_name = "convlstm" 
 systemName = systemModel.upper() + " " + domain.upper() + " " + subdomain.upper()
-ef5Path = "/home/nammehta/EF5V1.2.6/EF5V1.2.6/bin/ef5"
+ef5Path = "/home/naman/EF5/EF5LatestRelease/EF5/bin/ef5"
 statesPath = "states/"
 statesHighResPath = "statesHighRes/"
 precipFolder = "precip/"
@@ -36,6 +36,12 @@ highres_min_gauges = 1
 highres_dataPath = "outputs_25m/"
 highres_tmpOutput = highres_dataPath + "tmp_output_" + systemModel + "_25m/"
 
+# Data Assimilation (DA) configuration
+run_withDA = True
+DA_climatology_path = "DA_Climatology/"
+DA_manual_path = "DA_Manual/"
+DA_consolidated_path = "DA_Consolidated/"
+DA_list_path = "templates/DA_list.txt"
 
 #Alerts configuration
 SEND_ALERTS = False

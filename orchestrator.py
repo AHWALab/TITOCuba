@@ -26,11 +26,13 @@ import numpy as np
 import re
 import subprocess
 import sys
+import traceback
 from tito_utils.file_utils import cleanup_precip, newline
 from tito_utils.qpe_utils import get_new_precip
 from tito_utils.qpf_utils import run_convlstm, download_GFS, GFS_searcher, WRF_searcher 
 from tito_utils.ef5 import prepare_ef5, run_ef5_simulation
 from tito_utils.highres_utils import prepare_highres_control
+from tito_utils.da_utils import process_da_for_simulation
 print(">>> Modules imported")
 
 """
@@ -112,6 +114,11 @@ def main(args):
     highres_min_gauges = getattr(config_file, "highres_min_gauges", 1)
     highres_dataPath = getattr(config_file, "highres_dataPath", dataPath)
     highres_tmpOutput = getattr(config_file, "highres_tmpOutput", tmpOutput)
+    run_withDA = getattr(config_file, "run_withDA", False)
+    DA_climatology_path = getattr(config_file, "DA_climatology_path", "DA_Climatology/")
+    DA_manual_path = getattr(config_file, "DA_manual_path", "DA_Manual/")
+    DA_consolidated_path = getattr(config_file, "DA_consolidated_path", "DA_Consolidated/")
+    DA_list_path = getattr(config_file, "DA_list_path", "templates/DA_list.txt")
     SEND_ALERTS = config_file.SEND_ALERTS
     alert_recipients = config_file.alert_recipients
     HindCastMode = config_file.HindCastMode
@@ -229,13 +236,39 @@ def main(args):
         print("***_________All QPE + QPF files are ready in local folder_________***")
     newline(2)
     
+    ###-------------------------- START DA SECTION --------------------------------
+    da_path_map = None
+    consolidated_csv_path = None
+    
+    if run_withDA:
+        try:
+            # Process DA data for the simulation period
+            output_timestamp_str = currentTime.strftime("%Y%m%d_%H%M")
+            da_path_map, consolidated_csv_path = process_da_for_simulation(
+                DA_list_path,
+                DA_manual_path,
+                DA_climatology_path,
+                DA_consolidated_path,
+                systemStartTime,
+                systemEndTime,
+                output_timestamp_str
+            )
+            newline(2)
+        except Exception as e:
+            print(f"There was a problem with the DA routines: {e}. Ignoring errors and continuing without DA")
+            traceback.print_exc()
+            run_withDA = False
+            da_path_map = None
+            consolidated_csv_path = None
+    
     ###-------------------------- START EF5 SECTION --------------------------------
     print("***_________Preparing the EF5 run_________***")
     realSystemStartTime, controlFile = prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates, 
         systemStartTime, failTime, currentTime, systemName, SEND_ALERTS, 
         alert_recipients, smtp_config, tmpOutput, dataPath, 
         subdomain, systemModel, templatePath, template, systemStartLRTime, 
-        systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run)
+        systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run,
+        da_path_map=da_path_map, consolidated_csv_path=consolidated_csv_path)
     
     print(f"    Running simulation system for: {currentTime.strftime('%Y%m%d_%H%M')}")
     print(f"    Simulations start at: {realSystemStartTime.strftime('%Y%m%d_%H%M')} and ends at: {systemEndTime.strftime('%Y%m%d_%H%M')} while state update ends at: {systemStateEndTime.strftime('%Y%m%d_%H%M')}")
@@ -310,6 +343,8 @@ def main(args):
                     LR_TimeStep,
                     LR_run,
                     highres_selection=selection,
+                    da_path_map=None,
+                    consolidated_csv_path=None,
                 )
                 print(f"    Running high-res simulation with {highres_resolution_tag} grids")
                 run_ef5_simulation(

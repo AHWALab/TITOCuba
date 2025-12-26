@@ -168,7 +168,7 @@ def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix):
     lines.append("")
     return "\n".join(lines)
 
-def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, statesFound, highres_selection=None):
+def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, statesFound, highres_selection=None, da_path_map=None, consolidated_csv_path=None):
     # Clean up "Hot" folders
     # Delete the previously existing "Hot" folders, ignore error if it doesn't exist
     # COMMENTED OUT FOR DEBUGGING - to examine generated control file
@@ -184,6 +184,28 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
 
     # Read template content
     template_content = open(templatePath + template).read()
+    
+    # Handle DA path updates if provided
+    if da_path_map:
+        print("    Updating gauge obs paths for DA")
+        # Update gauge obs paths for EMB gauges
+        for reservoir_id, obs_path in da_path_map.items():
+            # Find and replace obs path for this gauge
+            # Pattern: [gauge EMB2100002] ... obs=/old/path/...
+            pattern = rf"(\[gauge {reservoir_id}\][^\[]*)obs=[^\s]+"
+            replacement = rf"\1obs={obs_path}"
+            template_content = re.sub(pattern, replacement, template_content)
+        print(f"    Updated obs paths for {len(da_path_map)} gauges")
+    
+    # Update DA_FILE path if consolidated CSV was created
+    if consolidated_csv_path:
+        print(f"    Updating DA_FILE path to: {consolidated_csv_path}")
+        # Replace DA_FILE=... with the new path
+        template_content = re.sub(
+            r"DA_FILE=[^\n]+",
+            f"DA_FILE={consolidated_csv_path}",
+            template_content
+        )
     
     # Handle high-res gauge block replacement if provided
     if highres_selection and highres_selection.gauge_ids:
@@ -317,7 +339,7 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
     systemStartTime, failTime, currentTime, systemName, SEND_ALERTS, 
     alert_recipients, smtp_config, tmpOutput, dataPath, 
     subdomain, systemModel, templatePath, template, systemStartLRTime, 
-    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, highres_selection=None):
+    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, highres_selection=None, da_path_map=None, consolidated_csv_path=None):
 
     #copying precip files into folder 
     rename_ef5_precip(precipEF5Folder, precipFolder) 
@@ -337,7 +359,7 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
 
     controlFile = write_control_file(tmpOutput, dataPath, subdomain, systemModel, 
     templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, 
-    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, foundAllStates, highres_selection)
+    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, foundAllStates, highres_selection, da_path_map, consolidated_csv_path)
 
     """
     # If data assimilation if being used for CREST, clean up previous data assimilation logs
