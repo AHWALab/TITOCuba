@@ -274,7 +274,6 @@ def main(args):
                     maxunitq_path=maxunitq_path,
                     mask_grid_path=highres_maskgrid,
                     gauge_list_path=highres_gauge_list,
-                    template_path=highres_template_path,
                     threshold=highres_threshold,
                     gauge_name_prefix=f"{subdomain}_{highres_resolution_tag}",
                 )
@@ -310,6 +309,7 @@ def main(args):
                     systemEndTime,
                     LR_TimeStep,
                     LR_run,
+                    highres_selection=selection,
                 )
                 print(f"    Running high-res simulation with {highres_resolution_tag} grids")
                 run_ef5_simulation(

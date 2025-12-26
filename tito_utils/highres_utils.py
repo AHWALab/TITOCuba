@@ -23,6 +23,8 @@ class HighResSelection:
     """Container for the gauges selected for a 25 m rerun."""
 
     gauge_ids: List[int]
+    gauge_lookup: Dict[int, str]
+    gauge_name_prefix: str
 
     @property
     def count(self) -> int:
@@ -180,29 +182,18 @@ def _render_block_text(
     return "\n".join(lines)
 
 
-def _update_template_block(template_path: str, block_text: str) -> None:
-    with open(template_path, "r", encoding="utf-8") as handle:
-        template = handle.read()
-
-    if "#---Start Gauge-Basin Block" not in template:
-        raise ValueError(
-            f"Gauge-Basin marker not found in high-res template: {template_path}"
-        )
-
-    updated = GAUGE_BLOCK_PATTERN.sub(block_text, template, count=1)
-    with open(template_path, "w", encoding="utf-8") as handle:
-        handle.write(updated)
-
-
 def prepare_highres_control(
     maxunitq_path: str,
     mask_grid_path: str,
     gauge_list_path: str,
-    template_path: str,
     threshold: float,
     gauge_name_prefix: Optional[str] = None,
 ) -> HighResSelection:
-    """Update the high-res template with gauges exceeding the requested threshold."""
+    """Identify gauges exceeding the threshold for high-res rerun.
+    
+    Returns a HighResSelection with gauge IDs, lookup data, and name prefix.
+    The actual control file modification is handled by write_control_file.
+    """
 
     _require_rasterio()
 
@@ -215,7 +206,7 @@ def prepare_highres_control(
         maxunitq_band, meta = _load_maxunitq(maxunitq_path)
     except FileNotFoundError as exc:
         print(f"High-res rerun skipped: {exc}")
-        return HighResSelection([])
+        return HighResSelection([], {}, gauge_name_prefix)
 
     hot_gauges = _extract_hot_gauges(
         maxunitq_band,
@@ -225,11 +216,9 @@ def prepare_highres_control(
     )
 
     lookup = _load_gauge_lookup(gauge_list_path)
-    block_text = _render_block_text(hot_gauges, lookup, gauge_name_prefix)
-    _update_template_block(template_path, block_text)
 
-    print(f"High-res template updated with {len(hot_gauges)} gauge(s).")
-    return HighResSelection(hot_gauges)
+    print(f"Selected {len(hot_gauges)} gauge(s) for high-res run.")
+    return HighResSelection(hot_gauges, lookup, gauge_name_prefix)
 
 
 __all__ = ["HighResSelection", "prepare_highres_control"]

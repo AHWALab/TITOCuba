@@ -135,8 +135,40 @@ def send_state_alerts(foundAllStates,realSystemStartTime,systemStartTime,current
             subject=subject,
             text=message
         )
+def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix):
+    """Generate the gauge-basin block text for high-res control files."""
+    lines = ["#---Start Gauge-Basin Block", ""]
+    
+    reindexed_lines = []
+    missing = []
+    for new_idx, gauge_id in enumerate(gauge_ids):
+        raw_line = gauge_lookup.get(gauge_id)
+        if raw_line is None:
+            missing.append(gauge_id)
+            continue
+        # Reindex the gauge line
+        reindexed = re.sub(r"\[Gauge\s+\d+\]", f"[Gauge {new_idx}]", raw_line, count=1)
+        reindexed_lines.append(reindexed)
+    
+    if missing:
+        print(f"    Warning: skipped {len(missing)} gauge(s) absent from the gauge list: {missing}")
+    
+    if reindexed_lines:
+        lines.extend(reindexed_lines)
+        lines.append("")
+        lines.append("[Basin 0]")
+        gauge_names = " ".join(f"gauge={gauge_name_prefix}_{gid}" for gid in gauge_ids)
+        if gauge_names:
+            lines.append(f"# {gauge_names}")
+        gauge_indices = " ".join(f"gauge={idx}" for idx in range(len(reindexed_lines)))
+        lines.append(gauge_indices)
+        lines.append("")
+    
+    lines.append("#---End Gauge-Basin Block")
+    lines.append("")
+    return "\n".join(lines)
 
-def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, statesFound):
+def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, statesFound, highres_selection=None):
     # Clean up "Hot" folders
     # Delete the previously existing "Hot" folders, ignore error if it doesn't exist
     # COMMENTED OUT FOR DEBUGGING - to examine generated control file
@@ -150,8 +182,28 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
     controlFile = tmpOutput + "WA_" + subdomain + "_" + systemModel + ".txt"
     fOut = open(controlFile, "w")
 
-    # Create a control file with updated fields
-    for line in open(templatePath + template).readlines():
+    # Read template content
+    template_content = open(templatePath + template).read()
+    
+    # Handle high-res gauge block replacement if provided
+    if highres_selection and highres_selection.gauge_ids:
+        gauge_block = _generate_gauge_block(
+            highres_selection.gauge_ids,
+            highres_selection.gauge_lookup,
+            highres_selection.gauge_name_prefix
+        )
+        # Replace the gauge block in the template
+        gauge_block_pattern = re.compile(
+            r"#---Start Gauge-Basin Block.*?#---End Gauge-Basin Block", re.DOTALL
+        )
+        if "#---Start Gauge-Basin Block" in template_content:
+            template_content = gauge_block_pattern.sub(gauge_block, template_content, count=1)
+            print(f"    Control file updated with {len(highres_selection.gauge_ids)} high-res gauge(s).")
+        else:
+            print("    Warning: Gauge-Basin marker not found in template; skipping gauge block update.")
+    
+    # Process template line by line for other replacements
+    for line in template_content.splitlines(keepends=True):
         line = re.sub('{OUTPUTPATH}', tmpOutput, line)
         line = re.sub('{STATESPATH}', statesPath, line)
         line = re.sub('{TIMEBEGIN}', realSystemStartTime.strftime('%Y%m%d%H%M'), line)
@@ -189,7 +241,10 @@ def run_EF5(ef5Path, hot_folder_path, control_file, log_file):
         control_file {str} -- path to the control file fir the simulation
         log_file {str} -- path to the log file for this run
     """
-    subprocess.call(ef5Path + " " + control_file + " > " + hot_folder_path + log_file, shell=True)
+    # Avoid shell=True to prevent /bin/sh issues. Handle output redirection in Python.
+    log_path = os.path.join(hot_folder_path, log_file)
+    with open(log_path, 'w') as log:
+        subprocess.call([ef5Path, control_file], stdout=log, stderr=subprocess.STDOUT)
 
 
 def _compose_output_path(base_path: str, timestamp_str: str, extension: str, resolution_tag: Optional[str]) -> str:
@@ -262,7 +317,7 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
     systemStartTime, failTime, currentTime, systemName, SEND_ALERTS, 
     alert_recipients, smtp_config, tmpOutput, dataPath, 
     subdomain, systemModel, templatePath, template, systemStartLRTime, 
-    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run):
+    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, highres_selection=None):
 
     #copying precip files into folder 
     rename_ef5_precip(precipEF5Folder, precipFolder) 
@@ -282,7 +337,7 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
 
     controlFile = write_control_file(tmpOutput, dataPath, subdomain, systemModel, 
     templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, 
-    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, foundAllStates)
+    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, foundAllStates, highres_selection)
 
     """
     # If data assimilation if being used for CREST, clean up previous data assimilation logs
