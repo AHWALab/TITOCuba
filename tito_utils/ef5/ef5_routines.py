@@ -168,34 +168,22 @@ def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix):
     lines.append("")
     return "\n".join(lines)
 
-def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, statesFound, highres_selection=None, da_path_map=None, consolidated_csv_path=None):
+def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, statesFound, highres_selection=None, consolidated_csv_path=None):
     # Clean up "Hot" folders
     # Delete the previously existing "Hot" folders, ignore error if it doesn't exist
     # COMMENTED OUT FOR DEBUGGING - to examine generated control file
     rmtree(tmpOutput, ignore_errors=1)
-    rmtree(dataPath, ignore_errors=1)
+    # rmtree(dataPath, ignore_errors=1) # Do not delete the parent data path
     # Create the "Hot" folder for the current run
     mkdir_p(tmpOutput)
     mkdir_p(dataPath)  
     # Create the control files for both subdomains
     # Define the control file path to create
-    controlFile = tmpOutput + "WA_" + subdomain + "_" + systemModel + ".txt"
+    controlFile = os.path.join(tmpOutput, "CU_" + subdomain + "_" + systemModel + ".txt")
     fOut = open(controlFile, "w")
 
     # Read template content
     template_content = open(templatePath + template).read()
-    
-    # Handle DA path updates if provided
-    if da_path_map:
-        print("    Updating gauge obs paths for DA")
-        # Update gauge obs paths for EMB gauges
-        for reservoir_id, obs_path in da_path_map.items():
-            # Find and replace obs path for this gauge
-            # Pattern: [gauge EMB2100002] ... obs=/old/path/...
-            pattern = rf"(\[gauge {reservoir_id}\][^\[]*)obs=[^\s]+"
-            replacement = rf"\1obs={obs_path}"
-            template_content = re.sub(pattern, replacement, template_content)
-        print(f"    Updated obs paths for {len(da_path_map)} gauges")
     
     # Update DA_FILE path if consolidated CSV was created
     if consolidated_csv_path:
@@ -225,8 +213,10 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
             print("    Warning: Gauge-Basin marker not found in template; skipping gauge block update.")
     
     # Process template line by line for other replacements
+    # Ensure tmpOutput ends with a separator for the control file
+    tmpOutput_with_sep = os.path.join(tmpOutput, '')
     for line in template_content.splitlines(keepends=True):
-        line = re.sub('{OUTPUTPATH}', tmpOutput, line)
+        line = re.sub('{OUTPUTPATH}', tmpOutput_with_sep, line)
         line = re.sub('{STATESPATH}', statesPath, line)
         line = re.sub('{TIMEBEGIN}', realSystemStartTime.strftime('%Y%m%d%H%M'), line)
         line = re.sub('{TIMEWARMEND}', systemWarmEndTime.strftime('%Y%m%d%H%M'), line)
@@ -339,7 +329,7 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
     systemStartTime, failTime, currentTime, systemName, SEND_ALERTS, 
     alert_recipients, smtp_config, tmpOutput, dataPath, 
     subdomain, systemModel, templatePath, template, systemStartLRTime, 
-    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, highres_selection=None, da_path_map=None, consolidated_csv_path=None):
+    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, highres_selection=None, consolidated_csv_path=None):
 
     #copying precip files into folder 
     rename_ef5_precip(precipEF5Folder, precipFolder) 
@@ -357,9 +347,12 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
     print(" ")
     print("    Writting control file.")
 
-    controlFile = write_control_file(tmpOutput, dataPath, subdomain, systemModel, 
+    # Create a timestamped output folder for this run
+    run_output_path = os.path.join(tmpOutput, currentTime.strftime('%Y%m%d%H%M'))
+
+    controlFile = write_control_file(run_output_path, dataPath, subdomain, systemModel, 
     templatePath, template, statesPath, realSystemStartTime, systemStartLRTime, 
-    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, foundAllStates, highres_selection, da_path_map, consolidated_csv_path)
+    systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run, foundAllStates, highres_selection, consolidated_csv_path)
 
     """
     # If data assimilation if being used for CREST, clean up previous data assimilation logs
@@ -370,4 +363,4 @@ def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates,
             if is_non_zero_file(assimilationPath + log) == True:
                 remove(assimilationPath + log)
     """
-    return realSystemStartTime, controlFile
+    return realSystemStartTime, controlFile, run_output_path

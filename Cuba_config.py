@@ -41,6 +41,7 @@ run_withDA = True
 DA_climatology_path = "DA_Climatology/"
 DA_manual_path = "DA_Manual/"
 DA_consolidated_path = "DA_Consolidated/"
+DA_simulation_path = "DA_Simulation/"
 DA_list_path = "templates/DA_list.txt"
 
 #Alerts configuration

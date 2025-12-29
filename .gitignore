@@ -57,6 +57,15 @@
 !tito_utils/
 !tito_utils/**
 
+!DA_Climatology/
+!DA_Climatology/.gitignore
+!DA_Consolidated/
+!DA_Consolidated/.gitignore
+!DA_Manual/
+!DA_Manual/.gitignore
+!DA_Simulation/
+!DA_Simulation/.gitignore
+
 ###############################################
 # Block heavy raster outputs                   #
 ###############################################

@@ -118,6 +118,7 @@ def main(args):
     DA_climatology_path = getattr(config_file, "DA_climatology_path", "DA_Climatology/")
     DA_manual_path = getattr(config_file, "DA_manual_path", "DA_Manual/")
     DA_consolidated_path = getattr(config_file, "DA_consolidated_path", "DA_Consolidated/")
+    DA_simulation_path = getattr(config_file, "DA_simulation_path", "DA_Simulation/")
     DA_list_path = getattr(config_file, "DA_list_path", "templates/DA_list.txt")
     SEND_ALERTS = config_file.SEND_ALERTS
     alert_recipients = config_file.alert_recipients
@@ -237,20 +238,21 @@ def main(args):
     newline(2)
     
     ###-------------------------- START DA SECTION --------------------------------
-    da_path_map = None
+    da_simulation_path = None
     consolidated_csv_path = None
     
     if run_withDA:
         try:
-            # Process DA data for the simulation period
+            # Process DA data for the simulation period (up to forecast start time)
             output_timestamp_str = currentTime.strftime("%Y%m%d_%H%M")
-            da_path_map, consolidated_csv_path = process_da_for_simulation(
+            da_simulation_path, consolidated_csv_path = process_da_for_simulation(
                 DA_list_path,
                 DA_manual_path,
                 DA_climatology_path,
                 DA_consolidated_path,
+                DA_simulation_path,
                 systemStartTime,
-                systemEndTime,
+                systemStartLRTime,
                 output_timestamp_str
             )
             newline(2)
@@ -258,17 +260,17 @@ def main(args):
             print(f"There was a problem with the DA routines: {e}. Ignoring errors and continuing without DA")
             traceback.print_exc()
             run_withDA = False
-            da_path_map = None
+            da_simulation_path = None
             consolidated_csv_path = None
     
     ###-------------------------- START EF5 SECTION --------------------------------
     print("***_________Preparing the EF5 run_________***")
-    realSystemStartTime, controlFile = prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates, 
+    realSystemStartTime, controlFile, run_output_path = prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates, 
         systemStartTime, failTime, currentTime, systemName, SEND_ALERTS, 
         alert_recipients, smtp_config, tmpOutput, dataPath, 
         subdomain, systemModel, templatePath, template, systemStartLRTime, 
         systemWarmEndTime, systemStateEndTime, systemEndTime, LR_TimeStep, LR_run,
-        da_path_map=da_path_map, consolidated_csv_path=consolidated_csv_path)
+        consolidated_csv_path=consolidated_csv_path)
     
     print(f"    Running simulation system for: {currentTime.strftime('%Y%m%d_%H%M')}")
     print(f"    Simulations start at: {realSystemStartTime.strftime('%Y%m%d_%H%M')} and ends at: {systemEndTime.strftime('%Y%m%d_%H%M')} while state update ends at: {systemStateEndTime.strftime('%Y%m%d_%H%M')}")
@@ -277,12 +279,12 @@ def main(args):
     
     # Use orchestrator's currentTime to timestamp outputs/logs
     output_timestamp_str = currentTime.strftime("%Y%m%d.%H%M%S")
-    run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str)
+    run_ef5_simulation(ef5Path, run_output_path, controlFile, output_timestamp_str)
     newline(2)
     print("******** EF5 Outputs are ready!!! ********")
 
     if run_highres:
-        maxunitq_path = os.path.join(tmpOutput, f"maxunitq.{output_timestamp_str}.tif")
+        maxunitq_path = os.path.join(run_output_path, f"maxunitq.{output_timestamp_str}.tif")
         highres_template_path = os.path.join(templatePath, highres_template)
         prerequisites = []
         if not highres_maskgrid:
@@ -318,7 +320,7 @@ def main(args):
                 newline(1)
                 print(f"***_________Preparing the high-resolution EF5 run ({selected_count} gauges)_________***")
                 _sync_highres_states(statesPath, statesHighResPath, highres_state_models)
-                hr_real_start, hr_control_file = prepare_ef5(
+                hr_real_start, hr_control_file, hr_run_output_path = prepare_ef5(
                     precipEF5Folder,
                     precipFolder,
                     statesHighResPath,
@@ -343,13 +345,12 @@ def main(args):
                     LR_TimeStep,
                     LR_run,
                     highres_selection=selection,
-                    da_path_map=None,
                     consolidated_csv_path=None,
                 )
                 print(f"    Running high-res simulation with {highres_resolution_tag} grids")
                 run_ef5_simulation(
                     ef5Path,
-                    highres_tmpOutput,
+                    hr_run_output_path,
                     hr_control_file,
                     output_timestamp_str,
                     resolution_tag=highres_resolution_tag,
