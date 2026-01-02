@@ -10,6 +10,7 @@ Quick usage guide:
 - Continuous auto mode (polls for latest cycle, uses defaults defined below):  
   `python gfs_downloader.py   cd /home/nammehta/TITOV2Cuba/tito_utils/qpf_utils
   `python gfs_downloader.py --out /home/nammehta/TITOV2Cuba/precip/GFS/GFSData ` or `python gfs_downloader.py --auto-once` for a single pass.
+  `nohup python gfs_downloader.py --auto-out /home/nammehta/TITO_Final_DA_Cuba/precip/GFS > /home/nammehta/TITO_Final_DA_Cuba/data/logs/gfs_downloader.log 2>&1 &` to run in background.
 
 This module exposes a single function `download_GFS(systemStartLRTime, systemEndTime, xmin, xmax, ymin, ymax, qpf_store_path)`
 that downloads GFS precipitation rate (PRATE) for a given model run start time and a requested
