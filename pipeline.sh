@@ -12,11 +12,10 @@ mkdir -p "$LOG_DIR"
 RUN_TS=$(date -u +%Y%m%dT%H%M%S)
 LOG_FILE="$LOG_DIR/tito_hourly_${RUN_TS}.log"
 
-exec > >(tee -a "$LOG_FILE") 2>&1
+exec > >(stdbuf -oL -eL tee -a "$LOG_FILE") 2>&1
 
 echo "==== TITO hourly run started at $(date -u --iso-8601=seconds) ===="
-echo "Delaying 5 minutes before starting orchestrator..."
-sleep 300
+echo "Log file: $LOG_FILE"
 
 # Locate Conda (cron-safe)
 CONDA_BASE=""
@@ -58,7 +57,7 @@ set -u
 
 echo "Running TITOV2 orchestrator..."
 cd "$PROJECT_ROOT"
-python orchestrator.py Cuba_config.py
+PYTHONUNBUFFERED=1 python orchestrator.py Cuba_config.py
 echo "Orchestrator complete."
 
 set +u

@@ -18,8 +18,8 @@ TITO is a framework designed to run the EF5 hydrologic model operationally, inte
   ```
 **4. Getting the files ready**
 
-- The 25m DEMs are large in size so they are provided in the following Zenodo link (placeholder for the Zenodo link). After downloading, all the TIF files should be extracted to the `basic/` folder.
-- Similarly, parameters and precomputed Data Assimilation CSV files are provided in the following Zenodo link (placeholder for the link). The parameters zip should be extracted in the `parameters/` folder and Data Assimilation data should be extracted in the `DA_Climatology/` folder.
+- The 25m DEMs are large in size so they are provided in the following [Zenodo link](https://zenodo.org/records/17716930). After downloading, all the TIF files should be extracted to the `basic/` folder.
+- Similarly, parameters and precomputed Data Assimilation CSV files are also provided on Zenodo. The parameters zip should be extracted in the `parameters/` folder and Data Assimilation data should be extracted in the `DA_Climatology/` folder.
 
 After installation, ensure that your TITO folder contains the following subdirectories and files.
 
@@ -99,6 +99,26 @@ Open `Cuba_config.py` and ensure the following settings are correct:
   ```sh
   ./pipeline.sh
   ```
+
+  Logs from the pipeline can be viewed in `data/logs/`.
+
+**Note on running the GFS downloader script:**
+
+It is advised to run the GFS download script in the background separately because GFS releases often go through delays. With every simulation, the script sometimes cannot find the latest GFS release, so it re-downloads the previous cycle, which is time-consuming. The GFS script under `tito_utils/qpf_utils/gfs_downloader.py` also supports background execution and will automatically check for new releases and keep the GFS files updated.
+
+To run this script in the background:
+
+1. Inside the terminal at the TITO root directory, activate the tito conda environment:
+   ```sh
+   conda activate tito_env
+   ```
+
+2. Run this script using the below command to keep the latest GFS files updated:
+   ```sh
+   nohup python tito_utils/qpf_utils/gfs_downloader.py --auto-out /home/<user>/<tito root>/precip/GFS > /home/<user>/<tito root>/data/logs/gfs_downloader.log 2>&1 &
+   ```
+
+   Logs from the script can be viewed in `data/logs/gfs_downloader.log`.
 
 Details of how TITO operates can be found in this document (placeholder).
 
