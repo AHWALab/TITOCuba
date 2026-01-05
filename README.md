@@ -102,6 +102,26 @@ Open `Cuba_config.py` and ensure the following settings are correct:
 
   Logs from the pipeline can be viewed in `data/logs/`.
 
+**3. Schedule TITO to run automatically every hour (optional):**
+  To run TITO automatically at the start of every hour:
+  
+  1. Open the crontab editor:
+     ```sh
+     crontab -e
+     ```
+  
+  2. Add this line to the file and save:
+     ```
+     0 * * * * /home/naman/labWork/TITOCubaTest/pipeline.sh
+     ```
+  
+  3. Verify the cron job is installed:
+     ```sh
+     crontab -l
+     ```
+  
+  TITO will now run automatically every hour at hh:00.
+
 **Note on running the GFS downloader script:**
 
 It is advised to run the GFS download script in the background separately because GFS releases often go through delays. With every simulation, the script sometimes cannot find the latest GFS release, so it re-downloads the previous cycle, which is time-consuming. The GFS script under `tito_utils/qpf_utils/gfs_downloader.py` also supports background execution and will automatically check for new releases and keep the GFS files updated.
