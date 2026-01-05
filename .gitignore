@@ -66,6 +66,10 @@
 !DA_Simulation/
 !DA_Simulation/.gitignore
 
+!data/
+!data/logs/
+!data/logs/.gitignore
+
 ###############################################
 # Block heavy raster outputs                   #
 ###############################################
