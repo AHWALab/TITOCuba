@@ -27,7 +27,7 @@ tmpOutput = dataPath + "tmp_output_" + systemModel + "/"
 
 # High-resolution EF5 rerun settings
 run_highres = True
-highres_threshold = 1.0  # maxunitq threshold to trigger 25m rerun
+highres_threshold = 3.0  # maxunitq threshold to trigger 25m rerun
 highres_template = "ef5_control_highRes_templeate.txt"
 highres_maskgrid = "basic/maskgrid.tif"
 highres_gauge_list = "templates/25mGaugeList.txt"

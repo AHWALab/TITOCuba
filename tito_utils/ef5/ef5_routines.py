@@ -185,7 +185,7 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
     # Read template content
     template_content = open(templatePath + template).read()
     
-    # Update DA_FILE path if consolidated CSV was created
+    # Update DA_FILE path if consolidated CSV was created, or comment out DA sections if DA is disabled
     if consolidated_csv_path:
         print(f"    Updating DA_FILE path to: {consolidated_csv_path}")
         # Replace DA_FILE=... with the new path
@@ -193,6 +193,33 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
             r"DA_FILE=[^\n]+",
             f"DA_FILE={consolidated_csv_path}",
             template_content
+        )
+    else:
+        # DA is disabled - comment out DA_FILE lines and all EMB gauges
+        print("    DA is disabled - commenting out DA_FILE lines and EMB gauge configurations")
+        
+        # Comment out DA_FILE lines
+        template_content = re.sub(
+            r"^(DA_FILE=)",
+            r"#\1",
+            template_content,
+            flags=re.MULTILINE
+        )
+        
+        # Comment out all gauge lines starting with [gauge EMB
+        template_content = re.sub(
+            r"^(\[gauge EMB)",
+            r"#\1",
+            template_content,
+            flags=re.MULTILINE
+        )
+        
+        # Comment out all gauge reference lines (gauge=EMB...)
+        template_content = re.sub(
+            r"^(gauge=EMB)",
+            r"#\1",
+            template_content,
+            flags=re.MULTILINE
         )
     
     # Handle high-res gauge block replacement if provided
