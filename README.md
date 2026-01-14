@@ -16,10 +16,18 @@ TITO is a framework designed to run the EF5 hydrologic model operationally, inte
   ```sh
   bash setup_tito.sh
   ```
-**4. Getting the files ready**
+
+**Note:** The setup script automatically downloads and extracts all required data files from Zenodo (basic/, parameters/, and DA_Climatology/ folders). If you prefer to do this manually or if the automatic download fails, follow the steps below:
+
+<details>
+<summary><b>Manual data download instructions (optional)</b></summary>
+
+**4. Getting the files ready (Manual method)**
 
 - The 25m DEMs are large in size so they are provided in the following [Zenodo link](https://zenodo.org/records/17716930). After downloading, all the TIF files should be extracted to the `basic/` folder.
 - Similarly, parameters and precomputed Data Assimilation CSV files are also provided on Zenodo. The parameters zip should be extracted in the `parameters/` folder and Data Assimilation data should be extracted in the `DA_Climatology/` folder.
+
+</details>
 
 After installation, ensure that your TITO folder contains the following subdirectories and files.
 
@@ -64,12 +72,6 @@ After completing the installation of the required environment and populating the
     - Path to your QPF archive (`QPF_archive_path`)  
   - If you are activating this option for **real-time operations**, TITO uses a predefined QPF time. You can check `orchestrator.py` to customize it for your convenience.
 - **email_gpm:** This version of TITO uses IMERG Early V07 as QPE. You will need to create an account on the GPM server to download precipitation files. Please visit the [NASA GPM registration web page](https://registration.pps.eosdis.nasa.gov/registration/) and follow the instructions provided on the webpage. **Important:** Use your registration email as the password so TITO can use it in the routines.
-
-**What if I want to use TITO in other regions?**
-
-If you plan to run TITO outside the default West Africa domain, there are a few important considerations. The machine learning routines were designed and trained using IMERG V07 data (0.1° resolution) over the West Africa region (xmin = −21.4, xmax = 30.4; ymin = −2.9, ymax = 33.1), corresponding to a grid size of **518 × 360 pixels**.
-
-If you intend to apply TITO to a different region, we recommend selecting an area with the same spatial dimensions (518 × 360 pixels) to ensure compatibility with the input structure.
 
 **Before running TITO, verify your configuration paths:**
 
@@ -143,7 +145,7 @@ To run this script in the background:
 Details of how TITO operates can be found in this document (placeholder).
 
 ## Contact
-Please contact Vanessa Robledo at vanessa-robledodelgado@uiowa.edu or the [AHWA Laboratory](https://ahwa.lab.uiowa.edu/) Development team at engr-ahwa-lab@uiowa.edu.
+Please contact Naman Mehta at naman-mehta@uiowa.edu or Vanessa Robledo at vanessa-robledodelgado@uiowa.edu or the [AHWA Laboratory](https://ahwa.lab.uiowa.edu/) Development team at engr-ahwa-lab@uiowa.edu.
 
 ## Cite this package
 Robledo Delgado, V., & Vergara, H. (2025). Threading Inputs to Outputs (TITO) (v2.0.0). Zenodo. https://doi.org/10.5281/zenodo.17246491

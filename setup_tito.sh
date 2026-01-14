@@ -13,7 +13,12 @@ cd ../../
 
 chmod +x pipeline.sh
 
-mkdir precip/
-mkdir precipEF5/
+# mkdir precip/
+# mkdir precipEF5/
 
 echo "Environment installed successfully..."
+
+# Download and extract data from Zenodo
+echo "Downloading required data files..."
+chmod +x download_data.sh
+./download_data.sh
