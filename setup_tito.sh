@@ -24,4 +24,5 @@ chmod +x download_data.sh
 ./download_data.sh
 
 echo "Configuring EF5 path..."
+chmod +x setup_ef5_path.sh
 ./setup_ef5_path.sh
