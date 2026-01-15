@@ -9,7 +9,7 @@ TITO is a framework designed to run the EF5 hydrologic model operationally, inte
   ```
 **2. Navigate to the repository folder**
   ```sh
-  cd TITO/
+  cd TITOCuba/
   ```
 **3. Run the set up code**
    This step might take few minutes. 
@@ -28,6 +28,9 @@ TITO is a framework designed to run the EF5 hydrologic model operationally, inte
 - Similarly, parameters and precomputed Data Assimilation CSV files are also provided on Zenodo. The parameters zip should be extracted in the `parameters/` folder and Data Assimilation data should be extracted in the `DA_Climatology/` folder.
 
 </details>
+
+**Note:** If the setup script could not set the EF5 executable path automatically, please update it manually in `Cuba_config.py` in the following variable:
+`ef5Path = "put EF5 executable path here example - /home/naman/EF5/EF5LatestRelease/EF5/bin/ef5"`
 
 After installation, ensure that your TITO folder contains the following subdirectories and files.
 
@@ -62,7 +65,7 @@ This repository is designed to run EF5 operationally over Cuba.
 ## How to run?
 **1. Edit the config file:**
 After completing the installation of the required environment and populating the corresponding EF5 folders, open `Cuba_config.py` file. There are few lines users need to change in this config file to run TITO successfully:
-- **ef5Path:** Update this path to the corresponding ef5's binary path in your system.
+- **ef5Path:** Make sure the EF5 executable path is correctly placed. If the setup script did not set it automatically, please update this path to the corresponding ef5's binary path in your system.
 - **HindCastMode:** If you are running an event happened in the PAST, set `HindCastMode = True` and write the date of interest in `HindCastDate`, use the format "YYYY-MM-DD HH:MM". If you want to run it in Nowcast Mode (meaning TITO will start running in the present time) set `HindCastMode = False`
 - **run_LR:** To include QPF in the simulation (options are GFS or WRF), set `run_LR = True`.  
   - If the simulation is for a **past event** (`HindCastMode = True`), you must provide:  

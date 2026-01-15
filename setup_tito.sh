@@ -22,3 +22,6 @@ echo "Environment installed successfully..."
 echo "Downloading required data files..."
 chmod +x download_data.sh
 ./download_data.sh
+
+echo "Configuring EF5 path..."
+./setup_ef5_path.sh

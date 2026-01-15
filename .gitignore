@@ -13,6 +13,7 @@
 !orchestrator.py
 !pipeline.sh
 !setup_tito.sh
+!setup_ef5_path.sh
 !README.md
 !tito_env.yml
 
