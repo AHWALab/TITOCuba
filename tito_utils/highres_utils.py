@@ -25,6 +25,8 @@ class HighResSelection:
     gauge_ids: List[int]
     gauge_lookup: Dict[int, str]
     gauge_name_prefix: str
+    da_gauge_ids: Optional[List[str]] = None  # List of DA gauge IDs (e.g., ['EMB2800002', ...])
+    da_gauge_lookup: Optional[Dict[str, str]] = None  # Mapping of DA gauge ID to gauge line
 
     @property
     def count(self) -> int:
@@ -139,6 +141,26 @@ def _load_gauge_lookup(gauge_list_path: str) -> Dict[int, str]:
     return lookup
 
 
+def _load_da_gauge_lookup(gauge_list_path: str) -> Dict[str, str]:
+    """Load DA gauges (EMBxxxxxx format) from the 25m gauge list file."""
+    if not os.path.exists(gauge_list_path):
+        return {}
+
+    lookup: Dict[str, str] = {}
+    with open(gauge_list_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or not line.startswith("[gauge EMB"):
+                continue
+            # Match [gauge EMBxxxxxxx] pattern
+            match = re.match(r"\[gauge\s+(EMB\d+)\]", line)
+            if not match:
+                continue
+            gauge_id = match.group(1)
+            lookup[gauge_id] = line
+    return lookup
+
+
 def _reindex_gauge_line(raw_line: str, new_index: int) -> str:
     return re.sub(r"\[Gauge\s+\d+\]", f"[Gauge {new_index}]", raw_line, count=1)
 
@@ -182,17 +204,118 @@ def _render_block_text(
     return "\n".join(lines)
 
 
+def _extract_lat_lon_from_gauge_line(gauge_line: str) -> Optional[tuple[float, float]]:
+    """Extract latitude and longitude from a gauge definition line.
+    
+    Returns (lat, lon) or None if not found.
+    """
+    lat_match = re.search(r"lat=([-+]?[0-9]*\.?[0-9]+)", gauge_line, re.IGNORECASE)
+    lon_match = re.search(r"lon=([-+]?[0-9]*\.?[0-9]+)", gauge_line, re.IGNORECASE)
+    
+    if lat_match and lon_match:
+        return float(lat_match.group(1)), float(lon_match.group(1))
+    return None
+
+
+def _filter_da_gauges_by_highres_selection(
+    selected_gauge_ids: List[int],
+    gauge_lookup: Dict[int, str],
+    da_gauge_lookup: Dict[str, str],
+    mask_grid_path: str,
+) -> tuple[List[str], Dict[str, str]]:
+    """Filter DA gauges to only include those falling within selected high-res gauges.
+    
+    This checks if DA gauge coordinates fall within the drainage area of any selected
+    high-res gauge by using the maskgrid raster.
+    
+    Args:
+        selected_gauge_ids: List of selected high-res gauge IDs
+        gauge_lookup: Lookup dict for high-res gauges (not used but kept for consistency)
+        da_gauge_lookup: Dict mapping DA gauge ID to gauge line
+        mask_grid_path: Path to the maskgrid raster file
+        
+    Returns:
+        Tuple of (filtered_da_gauge_ids, filtered_da_gauge_lookup)
+    """
+    if not selected_gauge_ids or not da_gauge_lookup:
+        return [], {}
+    
+    _require_rasterio()
+    
+    if not os.path.exists(mask_grid_path):
+        print(f"    Warning: maskgrid not found at {mask_grid_path}, including all DA gauges")
+        return list(da_gauge_lookup.keys()), da_gauge_lookup.copy()
+    
+    # Load the maskgrid
+    try:
+        with rasterio.open(mask_grid_path) as mask_ds:
+            transform = mask_ds.transform
+            nodata = mask_ds.nodata
+            mask_array = mask_ds.read(1, masked=True)
+            
+            selected_da_ids = []
+            selected_da_lookup = {}
+            
+            # Convert selected gauge IDs to a set for faster lookup
+            selected_set = set(selected_gauge_ids)
+            
+            # Check each DA gauge
+            for da_gauge_id, da_line in da_gauge_lookup.items():
+                coords = _extract_lat_lon_from_gauge_line(da_line)
+                if coords is None:
+                    print(f"    Warning: Could not extract coordinates from DA gauge {da_gauge_id}")
+                    continue
+                
+                lat, lon = coords
+                
+                # Convert lat/lon to raster row/col using the inverse transform
+                try:
+                    col, row = ~transform * (lon, lat)
+                    col, row = int(col), int(row)
+                    
+                    # Check if coordinates are within raster bounds
+                    if 0 <= row < mask_array.shape[0] and 0 <= col < mask_array.shape[1]:
+                        # Get the gauge ID at this location from the maskgrid
+                        mask_value = mask_array[row, col]
+                        
+                        # Check if this pixel drains to one of our selected gauges
+                        if not np.ma.is_masked(mask_value):
+                            gauge_id_at_location = int(round(float(mask_value)))
+                            if gauge_id_at_location in selected_set:
+                                selected_da_ids.append(da_gauge_id)
+                                selected_da_lookup[da_gauge_id] = da_line
+                                
+                except Exception as e:
+                    print(f"    Warning: Error processing DA gauge {da_gauge_id}: {e}")
+                    continue
+            
+            return selected_da_ids, selected_da_lookup
+            
+    except Exception as e:
+        print(f"    Warning: Error reading maskgrid ({e}), including all DA gauges")
+        return list(da_gauge_lookup.keys()), da_gauge_lookup.copy()
+
+
 def prepare_highres_control(
     maxunitq_path: str,
     mask_grid_path: str,
     gauge_list_path: str,
     threshold: float,
     gauge_name_prefix: Optional[str] = None,
+    enable_da: bool = False,
 ) -> HighResSelection:
     """Identify gauges exceeding the threshold for high-res rerun.
     
     Returns a HighResSelection with gauge IDs, lookup data, and name prefix.
     The actual control file modification is handled by write_control_file.
+    
+    Args:
+        maxunitq_path: Path to maxunitq raster file
+        mask_grid_path: Path to mask grid file  
+        gauge_list_path: Path to 25m gauge list file
+        threshold: Threshold value for gauge selection
+        gauge_name_prefix: Prefix for gauge names
+        enable_da: Whether DA is enabled (if True, will include DA gauges)
     """
 
     _require_rasterio()
@@ -206,7 +329,7 @@ def prepare_highres_control(
         maxunitq_band, meta = _load_maxunitq(maxunitq_path)
     except FileNotFoundError as exc:
         print(f"High-res rerun skipped: {exc}")
-        return HighResSelection([], {}, gauge_name_prefix)
+        return HighResSelection([], {}, gauge_name_prefix, None, None)
 
     hot_gauges = _extract_hot_gauges(
         maxunitq_band,
@@ -217,8 +340,22 @@ def prepare_highres_control(
 
     lookup = _load_gauge_lookup(gauge_list_path)
 
+    # Handle DA gauges if enabled
+    da_gauge_ids = None
+    da_gauge_lookup = None
+    if enable_da and hot_gauges:
+        da_gauge_lookup_full = _load_da_gauge_lookup(gauge_list_path)
+        if da_gauge_lookup_full:
+            da_gauge_ids, da_gauge_lookup = _filter_da_gauges_by_highres_selection(
+                hot_gauges, lookup, da_gauge_lookup_full, mask_grid_path
+            )
+            if da_gauge_ids:
+                print(f"Selected {len(da_gauge_ids)} DA gauge(s) for high-res run (spatially filtered).")
+            else:
+                print("No DA gauges found within selected high-res drainage areas.")
+
     print(f"Selected {len(hot_gauges)} gauge(s) for high-res run.")
-    return HighResSelection(hot_gauges, lookup, gauge_name_prefix)
+    return HighResSelection(hot_gauges, lookup, gauge_name_prefix, da_gauge_ids, da_gauge_lookup)
 
 
 __all__ = ["HighResSelection", "prepare_highres_control"]

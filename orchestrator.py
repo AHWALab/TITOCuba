@@ -311,6 +311,7 @@ def main(args):
                     gauge_list_path=highres_gauge_list,
                     threshold=highres_threshold,
                     gauge_name_prefix=f"{subdomain}_{highres_resolution_tag}",
+                    enable_da=run_withDA,
                 )
             except Exception as exc:
                 print(f"High-res preprocessing failed: {exc}")
@@ -345,7 +346,7 @@ def main(args):
                     LR_TimeStep,
                     LR_run,
                     highres_selection=selection,
-                    consolidated_csv_path=None,
+                    consolidated_csv_path=consolidated_csv_path,  # Use same DA file as 1km
                 )
                 print(f"    Running high-res simulation with {highres_resolution_tag} grids")
                 run_ef5_simulation(

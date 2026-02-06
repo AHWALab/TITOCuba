@@ -135,8 +135,16 @@ def send_state_alerts(foundAllStates,realSystemStartTime,systemStartTime,current
             subject=subject,
             text=message
         )
-def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix):
-    """Generate the gauge-basin block text for high-res control files."""
+def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix, da_gauge_ids=None, da_gauge_lookup=None):
+    """Generate the gauge-basin block text for high-res control files.
+    
+    Args:
+        gauge_ids: List of high-res gauge IDs (integers)
+        gauge_lookup: Dict mapping gauge ID to gauge line
+        gauge_name_prefix: Prefix for gauge names
+        da_gauge_ids: Optional list of DA gauge IDs (strings like 'EMB2800002')
+        da_gauge_lookup: Optional dict mapping DA gauge ID to gauge line
+    """
     lines = ["#---Start Gauge-Basin Block", ""]
     
     reindexed_lines = []
@@ -156,6 +164,22 @@ def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix):
     if reindexed_lines:
         lines.extend(reindexed_lines)
         lines.append("")
+        
+        # Add DA gauges if provided
+        if da_gauge_ids and da_gauge_lookup:
+            lines.append("#---Start DA Gauge Block (25m coordinates)")
+            da_missing = []
+            for da_gauge_id in da_gauge_ids:
+                da_line = da_gauge_lookup.get(da_gauge_id)
+                if da_line is None:
+                    da_missing.append(da_gauge_id)
+                    continue
+                lines.append(da_line)
+            if da_missing:
+                print(f"    Warning: skipped {len(da_missing)} DA gauge(s) absent from the gauge list: {da_missing}")
+            lines.append("#---End DA Gauge Block (25m coordinates)")
+            lines.append("")
+        
         lines.append("[Basin 0]")
         gauge_names = " ".join(f"gauge={gauge_name_prefix}_{gid}" for gid in gauge_ids)
         if gauge_names:
@@ -227,7 +251,9 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
         gauge_block = _generate_gauge_block(
             highres_selection.gauge_ids,
             highres_selection.gauge_lookup,
-            highres_selection.gauge_name_prefix
+            highres_selection.gauge_name_prefix,
+            da_gauge_ids=highres_selection.da_gauge_ids,
+            da_gauge_lookup=highres_selection.da_gauge_lookup
         )
         # Replace the gauge block in the template
         gauge_block_pattern = re.compile(
@@ -235,7 +261,11 @@ def write_control_file(tmpOutput, dataPath, subdomain, systemModel,templatePath,
         )
         if "#---Start Gauge-Basin Block" in template_content:
             template_content = gauge_block_pattern.sub(gauge_block, template_content, count=1)
-            print(f"    Control file updated with {len(highres_selection.gauge_ids)} high-res gauge(s).")
+            da_count = len(highres_selection.da_gauge_ids) if highres_selection.da_gauge_ids else 0
+            if da_count > 0:
+                print(f"    Control file updated with {len(highres_selection.gauge_ids)} high-res gauge(s) and {da_count} DA gauge(s).")
+            else:
+                print(f"    Control file updated with {len(highres_selection.gauge_ids)} high-res gauge(s).")
         else:
             print("    Warning: Gauge-Basin marker not found in template; skipping gauge block update.")
     
