@@ -166,6 +166,7 @@ def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix, da_gauge_i
         lines.append("")
         
         # Add DA gauges if provided
+        valid_da_gauge_ids = []
         if da_gauge_ids and da_gauge_lookup:
             lines.append("#---Start DA Gauge Block (25m coordinates)")
             da_missing = []
@@ -175,6 +176,7 @@ def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix, da_gauge_i
                     da_missing.append(da_gauge_id)
                     continue
                 lines.append(da_line)
+                valid_da_gauge_ids.append(da_gauge_id)
             if da_missing:
                 print(f"    Warning: skipped {len(da_missing)} DA gauge(s) absent from the gauge list: {da_missing}")
             lines.append("#---End DA Gauge Block (25m coordinates)")
@@ -184,8 +186,13 @@ def _generate_gauge_block(gauge_ids, gauge_lookup, gauge_name_prefix, da_gauge_i
         gauge_names = " ".join(f"gauge={gauge_name_prefix}_{gid}" for gid in gauge_ids)
         if gauge_names:
             lines.append(f"# {gauge_names}")
-        gauge_indices = " ".join(f"gauge={idx}" for idx in range(len(reindexed_lines)))
-        lines.append(gauge_indices)
+        
+        # Build gauge reference list: numbered gauges + DA gauges
+        gauge_refs = [f"gauge={idx}" for idx in range(len(reindexed_lines))]
+        if valid_da_gauge_ids:
+            gauge_refs.extend([f"gauge={da_id}" for da_id in valid_da_gauge_ids])
+        
+        lines.append(" ".join(gauge_refs))
         lines.append("")
     
     lines.append("#---End Gauge-Basin Block")
