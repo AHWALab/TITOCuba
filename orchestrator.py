@@ -120,6 +120,11 @@ def main(args):
     DA_consolidated_path = getattr(config_file, "DA_consolidated_path", "DA_Consolidated/")
     DA_simulation_path = getattr(config_file, "DA_simulation_path", "DA_Simulation/")
     DA_list_path = getattr(config_file, "DA_list_path", "templates/DA_list.txt")
+    run_nowCastOnly = getattr(config_file, "run_nowCastOnly", False)
+    nowCastOnly_dataPath = getattr(config_file, "nowCastOnly_dataPath", "nowCastOnly/")
+    nowCastOnly_tmpOutput = getattr(config_file, "nowCastOnly_tmpOutput", nowCastOnly_dataPath + "tmp_output_" + config_file.systemModel + "/")
+    nowCastOnly_highres_dataPath = getattr(config_file, "nowCastOnly_highres_dataPath", "nowCastOnly_25m/")
+    nowCastOnly_highres_tmpOutput = getattr(config_file, "nowCastOnly_highres_tmpOutput", nowCastOnly_highres_dataPath + "tmp_output_" + config_file.systemModel + "_25m/")
     SEND_ALERTS = config_file.SEND_ALERTS
     alert_recipients = config_file.alert_recipients
     HindCastMode = config_file.HindCastMode
@@ -243,7 +248,9 @@ def main(args):
     
     if run_withDA:
         try:
-            # Process DA data for the simulation period (up to forecast start time)
+            # Process DA data for the simulation period
+            # Manual data: only till nowcast (systemStartLRTime)
+            # Climatology data: full simulation including forecast (EndLRTime)
             output_timestamp_str = currentTime.strftime("%Y%m%d_%H%M")
             da_simulation_path, consolidated_csv_path = process_da_for_simulation(
                 DA_list_path,
@@ -252,7 +259,8 @@ def main(args):
                 DA_consolidated_path,
                 DA_simulation_path,
                 systemStartTime,
-                systemStartLRTime,
+                systemStartLRTime,  # End time for manual data (nowcast only)
+                EndLRTime,           # End time for climatology data (full simulation)
                 output_timestamp_str
             )
             newline(2)
@@ -364,7 +372,134 @@ def main(args):
                     f"needs at least {highres_min_gauges})."
                 )
     
+    ###-------------------------- NOWCAST-ONLY SIMULATION SECTION --------------------------------
+    if run_nowCastOnly:
+        newline(2)
+        print("***=========================================================================***")
+        print("***_________Starting NowCast-Only (IMERG-only) Simulation_________***")
+        print("***=========================================================================***")
+        
+        # NowCast-only timing: same start, ends at currentTime + 6h dry run (no GFS)
+        nc_systemEndTime = currentTime + timedelta(hours=6)
+        nc_LR_run = False
+        
+        print(f"    NowCast-only simulation period: {systemStartTime.strftime('%Y-%m-%d %H:%M')} to {nc_systemEndTime.strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Using same IMERG/nowcast precipitation (no GFS forecast)")
+        newline(1)
+        
+        # Prepare and run NowCast-only 1km EF5 simulation
+        print("***_________Preparing the NowCast-Only EF5 run_________***")
+        nc_realSystemStartTime, nc_controlFile, nc_run_output_path = prepare_ef5(
+            precipEF5Folder, precipFolder, statesPath, modelStates,
+            systemStartTime, failTime, currentTime, systemName, SEND_ALERTS,
+            alert_recipients, smtp_config, nowCastOnly_tmpOutput, nowCastOnly_dataPath,
+            subdomain, systemModel, templatePath, template, currentTime,
+            systemWarmEndTime, systemStateEndTime, nc_systemEndTime, LR_TimeStep, nc_LR_run,
+            consolidated_csv_path=consolidated_csv_path)
+        
+        print(f"    Running NowCast-only simulation for: {currentTime.strftime('%Y%m%d_%H%M')}")
+        print(f"    Simulations start at: {nc_realSystemStartTime.strftime('%Y%m%d_%H%M')} and ends at: {nc_systemEndTime.strftime('%Y%m%d_%H%M')}")
+        
+        print("***_________NowCast-Only EF5 is ready to be run_________***")
+        
+        run_ef5_simulation(ef5Path, nc_run_output_path, nc_controlFile, output_timestamp_str)
+        newline(2)
+        print("******** NowCast-Only EF5 Outputs are ready!!! ********")
+        
+        # High-res rerun for NowCast-only simulation (if enabled)
+        if run_highres:
+            nc_maxunitq_path = os.path.join(nc_run_output_path, f"maxunitq.{output_timestamp_str}.tif")
+            highres_template_path = os.path.join(templatePath, highres_template)
+            nc_prerequisites = []
+            if not highres_maskgrid:
+                nc_prerequisites.append("mask grid path not set")
+            elif not os.path.exists(highres_maskgrid):
+                nc_prerequisites.append(f"mask grid missing ({highres_maskgrid})")
+            if not highres_gauge_list:
+                nc_prerequisites.append("gauge list path not set")
+            elif not os.path.exists(highres_gauge_list):
+                nc_prerequisites.append(f"gauge list missing ({highres_gauge_list})")
+            if not os.path.exists(highres_template_path):
+                nc_prerequisites.append(f"high-res template missing ({highres_template_path})")
+            
+            if nc_prerequisites:
+                print("NowCast-Only high-res EF5 rerun skipped due to configuration issues:")
+                for issue in nc_prerequisites:
+                    print(f"    - {issue}")
+            else:
+                nc_selection = None
+                try:
+                    nc_selection = prepare_highres_control(
+                        maxunitq_path=nc_maxunitq_path,
+                        mask_grid_path=highres_maskgrid,
+                        gauge_list_path=highres_gauge_list,
+                        threshold=highres_threshold,
+                        gauge_name_prefix=f"{subdomain}_{highres_resolution_tag}",
+                        enable_da=run_withDA,
+                    )
+                except Exception as exc:
+                    print(f"NowCast-Only high-res preprocessing failed: {exc}")
+                
+                nc_selected_count = nc_selection.count if nc_selection else 0
+                if nc_selection and nc_selected_count >= max(1, highres_min_gauges):
+                    newline(1)
+                    print(f"***_________Preparing the NowCast-Only high-resolution EF5 run ({nc_selected_count} gauges)_________***")
+                    _sync_highres_states(statesPath, statesHighResPath, highres_state_models)
+                    nc_hr_real_start, nc_hr_control_file, nc_hr_run_output_path = prepare_ef5(
+                        precipEF5Folder,
+                        precipFolder,
+                        statesHighResPath,
+                        highres_state_models,
+                        systemStartTime,
+                        failTime,
+                        currentTime,
+                        systemName,
+                        SEND_ALERTS,
+                        alert_recipients,
+                        smtp_config,
+                        nowCastOnly_highres_tmpOutput,
+                        nowCastOnly_highres_dataPath,
+                        subdomain,
+                        systemModel,
+                        templatePath,
+                        highres_template,
+                        currentTime,
+                        systemWarmEndTime,
+                        systemStateEndTime,
+                        nc_systemEndTime,
+                        LR_TimeStep,
+                        nc_LR_run,
+                        highres_selection=nc_selection,
+                        consolidated_csv_path=consolidated_csv_path,
+                    )
+                    print(f"    Running NowCast-Only high-res simulation with {highres_resolution_tag} grids")
+                    run_ef5_simulation(
+                        ef5Path,
+                        nc_hr_run_output_path,
+                        nc_hr_control_file,
+                        output_timestamp_str,
+                        resolution_tag=highres_resolution_tag,
+                    )
+                    newline(1)
+                    print("******** NowCast-Only High-resolution EF5 Outputs are ready!!! ********")
+                else:
+                    print(
+                        f"NowCast-Only high-res EF5 rerun skipped (selected {nc_selected_count} gauge(s), "
+                        f"needs at least {highres_min_gauges}).")
+    
     ###-------------------------- FINAL CLEANUP --------------------------------
+    # Clean precipEF5 folder after all simulations are done
+    print("***_________Cleaning precipEF5 folder_________***")
+    try:
+        removed_ef5 = 0
+        for f in glob.glob(os.path.join(precipEF5Folder, "*")):
+            os.remove(f)
+            removed_ef5 += 1
+        print(f"    Removed {removed_ef5} file(s) from {precipEF5Folder}")
+    except Exception as e:
+        print(f"    Warning: Error cleaning precipEF5 folder: {e}")
+    newline(1)
+    
     # Remove any duplicated IMERG files created during this run
     # This ensures the next run starts with only real IMERG data
     newline(2)

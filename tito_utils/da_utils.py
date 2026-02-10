@@ -108,7 +108,8 @@ def create_simulation_csv_files(
     da_climatology_path: str,
     da_simulation_path: str,
     start_time: datetime,
-    end_time: datetime
+    manual_end_time: datetime,
+    climatology_end_time: datetime
 ) -> Tuple[int, int]:
     """
     Create individual CSV files for each reservoir in DA_Simulation folder.
@@ -122,7 +123,8 @@ def create_simulation_csv_files(
         da_climatology_path: Path to climatology DA data folder
         da_simulation_path: Path to DA_Simulation output folder
         start_time: Simulation start time
-        end_time: Simulation end time (typically systemStartLRTime)
+        manual_end_time: End time for manual data (typically systemStartLRTime - nowcast only)
+        climatology_end_time: End time for climatology data (typically EndLRTime - full simulation)
         
     Returns:
         Tuple of (manual_count, climatology_count)
@@ -140,22 +142,25 @@ def create_simulation_csv_files(
     
     # Convert to timezone-naive pandas Timestamps
     start_ts = pd.Timestamp(start_time).tz_localize(None) if pd.Timestamp(start_time).tz else pd.Timestamp(start_time)
-    end_ts = pd.Timestamp(end_time).tz_localize(None) if pd.Timestamp(end_time).tz else pd.Timestamp(end_time)
+    manual_end_ts = pd.Timestamp(manual_end_time).tz_localize(None) if pd.Timestamp(manual_end_time).tz else pd.Timestamp(manual_end_time)
+    climatology_end_ts = pd.Timestamp(climatology_end_time).tz_localize(None) if pd.Timestamp(climatology_end_time).tz else pd.Timestamp(climatology_end_time)
     
     for reservoir_id in reservoirs:
-        # Check manual data first
+        # Check manual data first (check against manual_end_time)
         is_manual_available, _ = check_manual_da_availability(
-            reservoir_id, da_manual_path, start_time, end_time
+            reservoir_id, da_manual_path, start_time, manual_end_time
         )
         
-        # Determine source path
+        # Determine source path and end time to use
         if is_manual_available:
             source_path = os.path.join(da_manual_path, f"{reservoir_id}_Vertimiento_Serie.csv")
             source_type = "manual"
+            end_ts = manual_end_ts
             manual_count += 1
         else:
             source_path = os.path.join(da_climatology_path, f"{reservoir_id}_Vertimiento_Serie.csv")
             source_type = "climatology"
+            end_ts = climatology_end_ts
             climatology_count += 1
         
         # Read and process the source data
@@ -358,7 +363,8 @@ def process_da_for_simulation(
     da_consolidated_path: str,
     da_simulation_path: str,
     start_time: datetime,
-    end_time: datetime,
+    manual_end_time: datetime,
+    climatology_end_time: datetime,
     timestamp_str: str
 ) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -371,7 +377,8 @@ def process_da_for_simulation(
         da_consolidated_path: Path to consolidated output folder
         da_simulation_path: Path to DA_Simulation folder for individual CSVs
         start_time: Simulation start time
-        end_time: Simulation end time (typically systemStartLRTime)
+        manual_end_time: End time for manual data (typically systemStartLRTime - nowcast only)
+        climatology_end_time: End time for climatology data (typically EndLRTime - full simulation)
         timestamp_str: Timestamp string for output filename
         
     Returns:
@@ -387,7 +394,7 @@ def process_da_for_simulation(
     # Create individual CSV files in DA_Simulation
     manual_count, climatology_count = create_simulation_csv_files(
         reservoirs, da_manual_path, da_climatology_path, 
-        da_simulation_path, start_time, end_time
+        da_simulation_path, start_time, manual_end_time, climatology_end_time
     )
     
     # Prepare path map for consolidated CSV (using DA_Simulation files)
@@ -396,9 +403,10 @@ def process_da_for_simulation(
         relative_path = os.path.join(da_simulation_path, f"{reservoir_id}_Vertimiento_Serie.csv")
         da_path_map[reservoir_id] = relative_path
     
-    # Create consolidated CSV
+    # Create consolidated CSV (using the max end time for consolidation)
+    max_end_time = max(manual_end_time, climatology_end_time)
     consolidated_csv_path = create_consolidated_da_csv(
-        reservoirs, da_path_map, start_time, end_time,
+        reservoirs, da_path_map, start_time, max_end_time,
         da_consolidated_path, timestamp_str
     )
     

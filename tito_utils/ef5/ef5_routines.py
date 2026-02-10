@@ -384,10 +384,6 @@ def run_ef5_simulation(ef5Path, tmpOutput, controlFile, output_timestamp_str, re
     # Rename generated outputs to use the requested timestamp
     _rename_outputs_with_timestamp(tmpOutput, output_timestamp_str, resolution_tag)
 
-    # cleaning EF5 precipitation for next cycle
-    for f in glob.glob("precipEF5/*"):
-        os.remove(f)
-
  
 def prepare_ef5(precipEF5Folder, precipFolder, statesPath, modelStates, 
     systemStartTime, failTime, currentTime, systemName, SEND_ALERTS, 
