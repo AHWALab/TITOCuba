@@ -63,17 +63,22 @@ alert_sender = "Real Time Model Alert" # can also be the same as account_address
 alert_recipients = ["fixer1@company.com", "fixer2@company.com", "panic@company.com",...]
 copyToWeb = False
 
+# Warmup configuration
+# Number of days of warmup to run when no valid states are found.
+# Set to 0 to use the default behavior (start from systemStartTime with no extended warmup).
+warmup_days = 5
+
 #Simulation times 
 """
 If Hindcast and LR_mode is True, user MUST define StartLRtime, EndLRTime, LR_timestep,GFS_archive_path
 If running in operational mode (Hindcast False) and LR_mode = True, user only have to define LR_timestep, GFS_archive_path
 """
 HindCastMode = True
-HindCastDate = "2023-06-07 00:00" #"%Y-%m-%d %H:%M" UTC
+HindCastDate = "2023-06-07 01:00" #"%Y-%m-%d %H:%M" UTC
 
 run_LR = True
-StartLRtime = "2023-06-07 00:00" #"%Y-%m-%d %H:%M" UTC. Date of first QPF file
-EndLRTime = "2023-06-08 00:00" #"%Y-%m-%d %H:%M" UTC. Date of last QPF file
+StartLRtime = "2023-06-07 01:00" #"%Y-%m-%d %H:%M" UTC. Date of first QPF file
+EndLRTime = "2023-06-08 01:00" #"%Y-%m-%d %H:%M" UTC. Date of last QPF file
 LR_timestep = "60u"
 # Path to archived GFS GeoTIFFs used by LR/QPF. Must point to the in-repo folder
 # that actually contains the files (see precip/GFS/GFSData/ in this repo).

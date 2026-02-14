@@ -30,7 +30,7 @@ import traceback
 from tito_utils.file_utils import cleanup_precip, newline
 from tito_utils.qpe_utils import get_new_precip
 from tito_utils.qpf_utils import run_convlstm, download_GFS, GFS_searcher, WRF_searcher 
-from tito_utils.ef5 import prepare_ef5, run_ef5_simulation
+from tito_utils.ef5 import prepare_ef5, run_ef5_simulation, find_available_states
 from tito_utils.highres_utils import prepare_highres_control
 from tito_utils.da_utils import process_da_for_simulation
 print(">>> Modules imported")
@@ -132,6 +132,7 @@ def main(args):
     LR_run = config_file.run_LR
     LR_TimeStep = config_file.LR_timestep
     GFS_archive_path = config_file.QPF_archive_path
+    warmup_days = getattr(config_file, "warmup_days", 0)
     email_gpm = config_file.email_gpm
     server = config_file.server
     smtp_config = {
@@ -170,10 +171,16 @@ def main(args):
     systemStartTime = currentTime - timedelta(hours=4.5) 
     # Save states for the current run with the current time step's timestamp
     systemStateEndTime = currentTime - timedelta(hours=4) #change to 4
-    # Run warm up using the last hour of data until the current time step
-    systemWarmEndTime = currentTime - timedelta(hours=4)
     # Only check for states as far as we have QPs (6 hours)
     failTime = currentTime - timedelta(hours=6)
+    # Warmup end time: if warmup_days is configured and no states are found,
+    # the simulation will start warmup_days earlier and warm up until systemStartTime.
+    # The actual adjustment of systemStartTime happens in prepare_ef5 when states are not found.
+    if warmup_days > 0:
+        systemWarmEndTime = systemStartTime  # warmup runs from (systemStartTime - warmup_days) to systemStartTime
+        print(f"    Warmup configured: {warmup_days} day(s) if no states found")
+    else:
+        systemWarmEndTime = currentTime - timedelta(hours=4)  # default: minimal warmup
     
     systemStartLRTime = dt.strptime(config_file.StartLRtime,"%Y-%m-%d %H:%M")
     EndLRTime = dt.strptime(config_file.EndLRTime,"%Y-%m-%d %H:%M")
@@ -189,20 +196,39 @@ def main(args):
         systemEndTime = EndLRTime + timedelta(hours=6) #4 hours dry after gfs
     if not HindCastMode and not LR_run:
         systemEndTime = currentTime + timedelta(hours=6) #si no corro gfs y hindcast no 
+    
+    ###-------------------------- EARLY STATE CHECK --------------------------------
+    # Check for states early so we know if warmup is needed BEFORE downloading precip and DA
+    print("***_________Checking for available model states_________***")
+    foundAllStates, _ = find_available_states(statesPath, modelStates, systemStartTime, failTime)
+    
+    if not foundAllStates and warmup_days > 0:
+        warmupStartTime = systemStartTime - timedelta(days=warmup_days)
+        print(f"    No states found. Extending simulation start for {warmup_days}-day warmup.")
+        print(f"    Original start: {systemStartTime.strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Warmup start:   {warmupStartTime.strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Warmup end:     {systemWarmEndTime.strftime('%Y-%m-%d %H:%M')}")
+        # Push systemStartTime back for precip download, DA, and EF5
+        systemStartTime = warmupStartTime
+    elif foundAllStates:
+        print(f"    States found. No warmup needed.")
+    else:
+        print(f"    No states found and warmup_days=0. Proceeding without extended warmup.")
+    newline(2)
         
     ###-------------------------- START ROUTINES --------------------------------
     try:
         # Clean up old QPE files from GeoTIFF archive (older than 6 hours)
         # Keep latest QPFs
         print("***_________Cleaning old QPE files from the precip folder_________***")
-        cleanup_precip(currentTime, precipFolder, qpf_store_path)
+        cleanup_precip(currentTime, precipFolder, qpf_store_path, oldest_keep_time=systemStartTime)
         newline(1)
         print("***_________Precip folder cleaning completed_________***")
         newline(2)
         
         # Get the necessary QPEs and QPFs for the current time step into the GeoTIFF precip folder store whether there's a QPE gap or the QPEs for the current time step is missing
         print("***_________Retrieving IMERG files_________***")
-        get_new_precip(currentTime, server, precipFolder, email_gpm, HindCastMode, qpf_store_path, xmin, ymin, xmax, ymax)
+        get_new_precip(currentTime, server, precipFolder, email_gpm, HindCastMode, qpf_store_path, xmin, ymin, xmax, ymax, system_start_time=systemStartTime)
         newline(1)
         print("***_________IMERG files are complete in precip folder_________***")
         newline(2)
@@ -373,7 +399,12 @@ def main(args):
                 )
     
     ###-------------------------- NOWCAST-ONLY SIMULATION SECTION --------------------------------
-    if run_nowCastOnly:
+    # NowCast-Only is only meaningful when LR (GFS) is enabled, otherwise
+    # the main simulation is already IMERG-only and this would be redundant.
+    if run_nowCastOnly and not LR_run:
+        print("NowCast-Only simulation skipped: LR (GFS) is disabled so the main simulation is already IMERG-only.")
+    
+    if run_nowCastOnly and LR_run:
         newline(2)
         print("***=========================================================================***")
         print("***_________Starting NowCast-Only (IMERG-only) Simulation_________***")
