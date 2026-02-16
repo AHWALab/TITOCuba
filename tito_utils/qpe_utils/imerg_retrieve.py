@@ -274,11 +274,16 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
         print("    No '.tif' files found in the precip folder.") 
         #If there is no files in folder, Download the entire chuck of dates 
         #from failtime (current time - 6h) to Nowcast time (current time -4h) 
+        default_initial = current_timestamp - timedelta(hours = 9.5)
         if system_start_time is not None:
-            initial_time = _ensure_aware_utc(system_start_time)
-            print(f"    Using system_start_time for warmup: {initial_time}")
+            system_start_utc = _ensure_aware_utc(system_start_time)
+            # Use the EARLIER of system_start_time and the default to ensure
+            # we always download at least 12 IMERG files (6h) for the ML nowcast
+            initial_time = min(system_start_utc, default_initial)
+            if system_start_utc < default_initial:
+                print(f"    Using system_start_time for warmup: {initial_time}")
         else:
-            initial_time = current_timestamp - timedelta(hours = 9.5)
+            initial_time = default_initial
         #Downloading imerg Files
         nowcast_older_server = nowcast_older - timedelta(minutes=60)
         initial_time_server = initial_time - timedelta(minutes=30)
