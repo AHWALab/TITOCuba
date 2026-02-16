@@ -3,8 +3,8 @@
 echo "Downloading data files from Zenodo..."
 
 # Download the zip archive from Zenodo (this is a 1GB file, will take some time)
-ZENODO_URL="https://zenodo.org/api/records/17716930/files-archive"
-ARCHIVE_FILE="17716930.zip"
+ZENODO_URL="https://zenodo.org/api/records/18663123/files-archive"
+ARCHIVE_FILE="18663123.zip"
 
 echo "Downloading archive from $ZENODO_URL..."
 echo "This is a 1GB file and may take several minutes..."
