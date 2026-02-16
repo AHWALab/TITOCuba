@@ -274,9 +274,8 @@ def main(args):
     
     if run_withDA:
         try:
-            # Process DA data for the simulation period
-            # Manual data: only till nowcast (systemStartLRTime)
-            # Climatology data: full simulation including forecast (EndLRTime)
+            # Process DA data for the full simulation period (including dry run)
+            # For each gauge at each timestep: manual data preferred, else climatology
             output_timestamp_str = currentTime.strftime("%Y%m%d_%H%M")
             da_simulation_path, consolidated_csv_path = process_da_for_simulation(
                 DA_list_path,
@@ -285,8 +284,7 @@ def main(args):
                 DA_consolidated_path,
                 DA_simulation_path,
                 systemStartTime,
-                systemStartLRTime,  # End time for manual data (nowcast only)
-                EndLRTime,           # End time for climatology data (full simulation)
+                systemEndTime,       # Full simulation including dry run
                 output_timestamp_str
             )
             newline(2)
