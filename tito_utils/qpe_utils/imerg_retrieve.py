@@ -171,13 +171,16 @@ def processIMERG(local_filename,llx, lly ,urx, ury):
     NewGrid = NewGrid*0.1
     return NewGrid, nx, ny, gt, proj
 
-def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, HindCastMode, qpf_store_path, xmin, ymin, xmax, ymax):
+def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, HindCastMode, qpf_store_path, xmin, ymin, xmax, ymax, system_start_time=None):
     """Function that brings latest IMERG precipitation file into the GeoTIFF precip folder
 
     Arguments:
         current_timestamp {datetime} -- current time step's timestamp
         netcdf_feed_path {str} -- path to the geoTIFF precip data feed --- el httml
         geotiff_precip_path {str} -- path to the GeoTIFF precip archive -- el folder precip 
+        system_start_time {datetime} -- (optional) If provided, IMERG files will be downloaded
+            starting from this time instead of the default current_timestamp - 9.5h.
+            Used for warmup periods when no model states are available.
 
     Returns:
         ahead {bool} -- Returns True if the latest GeoTIFF timestamp is agead of the current time step
@@ -271,16 +274,28 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
         print("    No '.tif' files found in the precip folder.") 
         #If there is no files in folder, Download the entire chuck of dates 
         #from failtime (current time - 6h) to Nowcast time (current time -4h) 
-        initial_time = current_timestamp - timedelta(hours = 9.5)
+        default_initial = current_timestamp - timedelta(hours = 9.5)
+        if system_start_time is not None:
+            system_start_utc = _ensure_aware_utc(system_start_time)
+            # Use the EARLIER of system_start_time and the default to ensure
+            # we always download at least 12 IMERG files (6h) for the ML nowcast
+            initial_time = min(system_start_utc, default_initial)
+            if system_start_utc < default_initial:
+                print(f"    Using system_start_time for warmup: {initial_time}")
+        else:
+            initial_time = default_initial
         #Downloading imerg Files
         nowcast_older_server = nowcast_older - timedelta(minutes=60)
         initial_time_server = initial_time - timedelta(minutes=30)
         print("    Last IMERG file to download:", nowcast_older- timedelta(minutes=30))
         print("    Initial time to download:", initial_time)
         get_gpm_files(precipFolder, initial_time_server, nowcast_older_server, ppt_server_path, email, xmin, ymin, xmax, ymax)
-        #if some file is missing
+        # Check for missing files only in the recent window (not the full warmup period).
+        # Warmup files that failed to download can't be recovered from qpf_store,
+        # and server_files only lists one month, so checking old dates is pointless.
+        recent_check_start = max(initial_time, current_timestamp - timedelta(hours=9.5))
         missing_dates = []
-        next_timestamp = initial_time + timedelta(minutes=30)
+        next_timestamp = recent_check_start + timedelta(minutes=30)
 
         #retrieving gpm files for the last file that it is supposed to be downloaded.
         date_in_server = nowcast_older- timedelta(minutes=30)
@@ -290,20 +305,20 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
         while next_timestamp < nowcast_older:
             missing_dates.append(next_timestamp)
             next_timestamp += timedelta(minutes=30)
-            
-            for date in missing_dates:     
-                timestamps = [extract_timestamp(file).replace(tzinfo=timezone.utc) for file in server_files]
-                if date not in timestamps:
-                    print(f"    File {date} is missing")
-                    print("    Copying the corresponding file from nowcast store folder")
-                    formatted_date = date.strftime('%Y%m%d%H%M')
-                    for filename in os.listdir(qpf_store_path):
-                        if formatted_date in filename:
-                            source_file = os.path.join(qpf_store_path, filename)
-                            destination_file = os.path.join(precipFolder, filename)
-                            shutil.copy2(source_file, destination_file)
-                            print(f"    File '{filename}' was copied in '{precipFolder}'")
-                            break
+
+        for date in missing_dates:
+            timestamps = [extract_timestamp(file).replace(tzinfo=timezone.utc) for file in server_files]
+            if date not in timestamps:
+                print(f"    File {date} is missing")
+                print("    Copying the corresponding file from nowcast store folder")
+                formatted_date = date.strftime('%Y%m%d%H%M')
+                for filename in os.listdir(qpf_store_path):
+                    if formatted_date in filename:
+                        source_file = os.path.join(qpf_store_path, filename)
+                        destination_file = os.path.join(precipFolder, filename)
+                        shutil.copy2(source_file, destination_file)
+                        print(f"    File '{filename}' was copied in '{precipFolder}'")
+                        break
                     """
                     print(f"   There is no file in qpf store with date: '{formatted_date}'") ### TO DO
                     tif_files = glob.glob(os.path.join(precipFolder, "imerg.qpe.*.30minAccum.tif"))
@@ -317,6 +332,22 @@ def get_new_precip(current_timestamp, ppt_server_path, precipFolder, email, Hind
                     else:
                         print("    No .tif files found in precipFolder to copy")   
                     """
+
+    # --- WARMUP BACKWARD GAP CHECK ---
+    # If system_start_time is provided and earlier than the oldest file in the folder,
+    # download IMERG files to cover the gap between system_start_time and the oldest file.
+    if system_start_time is not None:
+        system_start_utc = _ensure_aware_utc(system_start_time)
+        tif_files_after = [f for f in os.listdir(precipFolder) if "qpe" in f]
+        if tif_files_after:
+            earliest_file = min(tif_files_after, key=lambda x: datetime.datetime.strptime(x[10:22], '%Y%m%d%H%M'))
+            earliest_dt = datetime.datetime.strptime(earliest_file[10:22], '%Y%m%d%H%M').replace(tzinfo=timezone.utc)
+            if earliest_dt > system_start_utc + timedelta(minutes=30):
+                print(f"    Downloading older IMERG files for warmup period: {system_start_utc.strftime('%Y-%m-%d %H:%M')} to {earliest_dt.strftime('%Y-%m-%d %H:%M')}")
+                warmup_initial = system_start_utc - timedelta(minutes=30)
+                warmup_final = earliest_dt - timedelta(minutes=60)
+                get_gpm_files(precipFolder, warmup_initial, warmup_final, ppt_server_path, email, xmin, ymin, xmax, ymax)
+
     # Get a list of all .tif files in the current directory and delete this files
     try:
         tif_files = glob.glob("./*.tif")

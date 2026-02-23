@@ -13,7 +13,7 @@ def _ensure_aware_utc(dt):
     except Exception:
         return dt.replace(tzinfo=timezone.utc)
 
-def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
+def cleanup_precip(current_datetime, precipFolder, qpf_store_path, oldest_keep_time=None):
     """Function that cleans up the precip folder for the current EF5 run
 
     Arguments:
@@ -21,12 +21,21 @@ def cleanup_precip(current_datetime, precipFolder, qpf_store_path):
         failTime {datetime} -- datetime object representing the maximum datetime in the past
         precipFolder {str} -- path to the geotiff precipitation folder
         qpf_store_path {str} -- path to the folder where QPF files are stored
+        oldest_keep_time {datetime} -- (optional) If provided, QPE files older than this
+            time will be deleted instead of the default current_datetime - 9.5h.
+            Used for warmup periods to keep precipitation files needed for simulation.
     """
     # Normalize current time to timezone-aware UTC
     current_datetime = _ensure_aware_utc(current_datetime)
     qpes = []
     qpfs = []
-    older_QPE = current_datetime - timedelta(hours=9.5)
+    default_cutoff = current_datetime - timedelta(hours=9.5)
+    if oldest_keep_time is not None:
+        oldest_keep_utc = _ensure_aware_utc(oldest_keep_time)
+        # Use the earlier of the two to keep more files when warmup is active
+        older_QPE = min(oldest_keep_utc, default_cutoff)
+    else:
+        older_QPE = default_cutoff
     imerg_Latency = current_datetime - timedelta(hours=4)
     
     try:

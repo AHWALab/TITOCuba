@@ -4,9 +4,11 @@ Data Assimilation (DA) utilities for TITO Cuba system.
 This module handles the preparation and management of reservoir observation data
 for data assimilation in the EF5 model.
 
+For each gauge at each timestep, manual data is preferred over climatology.
+If manual data is not available for a given timestep, climatology data is used.
+
 Functions:
     - read_reservoir_list: Read the list of reservoirs to process
-    - check_manual_da_availability: Check if manual DA data exists and covers simulation period
     - create_simulation_csv_files: Create individual CSV files for each reservoir in DA_Simulation
     - create_consolidated_da_csv: Create consolidated CSV with all reservoir data
     - process_da_for_simulation: Main function to orchestrate DA preparation
@@ -44,62 +46,120 @@ def read_reservoir_list(da_list_path: str) -> List[str]:
     return reservoirs
 
 
-def check_manual_da_availability(
+def _parse_da_csv(file_path: str) -> Optional[pd.DataFrame]:
+    """
+    Read and parse a DA CSV file into a DataFrame with a 'datetime' column.
+
+    Args:
+        file_path: Path to the CSV file (two columns: timestamp, value)
+
+    Returns:
+        DataFrame with columns ['timestamp', 'value', 'datetime'] or None on error.
+    """
+    if not os.path.exists(file_path):
+        return None
+    try:
+        df = pd.read_csv(file_path, header=None, names=['timestamp', 'value'])
+        # Try common date formats, then fall back to automatic parsing
+        for fmt in ('%m/%d/%Y %H:%M', '%d/%m/%Y %H:%M'):
+            try:
+                df['datetime'] = pd.to_datetime(df['timestamp'], format=fmt)
+                return df
+            except Exception:
+                continue
+        df['datetime'] = pd.to_datetime(df['timestamp'])
+        return df
+    except Exception as e:
+        print(f"      Warning: Error reading {file_path}: {e}")
+        return None
+
+
+def _merge_manual_climatology(
     reservoir_id: str,
     da_manual_path: str,
-    start_time: datetime,
-    end_time: datetime
-) -> Tuple[bool, Optional[str]]:
+    da_climatology_path: str,
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+) -> Tuple[Optional[pd.DataFrame], int, int]:
     """
-    Check if manual DA data exists for a reservoir and covers the simulation period.
-    
+    Build a merged timeseries for one reservoir.
+
+    If ANY manual entry falls within [start_ts, end_ts]:
+        - Use the climatology's timestep index as the backbone
+        - Fill ALL timesteps with the manual value (forward-fill then backward-fill)
+          so even a single manual observation covers the entire simulation period
+    If NO manual entries exist in the window:
+        - Fall back entirely to climatology
+
     Args:
-        reservoir_id: Reservoir ID (e.g., 'EMB2100002')
-        da_manual_path: Path to the DA_Manual folder
-        start_time: Simulation start time
-        end_time: Simulation end time
-        
+        reservoir_id: e.g. 'EMB2100002'
+        da_manual_path: folder containing manual CSVs
+        da_climatology_path: folder containing climatology CSVs
+        start_ts, end_ts: timezone-naive pandas Timestamps
+
     Returns:
-        Tuple of (data_available: bool, file_path: Optional[str])
+        (merged_df, manual_steps, climatology_steps)
+        merged_df has columns ['timestamp', 'value'] ready to write.
+        Returns (None, 0, 0) when no data is available at all.
     """
-    expected_filename = f"{reservoir_id}_Vertimiento_Serie.csv"
-    file_path = os.path.join(da_manual_path, expected_filename)
-    
-    if not os.path.exists(file_path):
-        return False, None
-    
-    try:
-        # Read the CSV file
-        df = pd.read_csv(file_path, header=None, names=['timestamp', 'value'])
-        
-        # Parse timestamps - handle both MM/DD/YYYY and DD/MM/YYYY formats
-        try:
-            df['datetime'] = pd.to_datetime(df['timestamp'], format='%m/%d/%Y %H:%M')
-        except:
-            try:
-                df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%m/%Y %H:%M')
-            except:
-                # Try automatic parsing as last resort
-                df['datetime'] = pd.to_datetime(df['timestamp'])
-        
-        # Check if data covers the simulation period
-        data_start = df['datetime'].min()
-        data_end = df['datetime'].max()
-        
-        # Convert Python datetime to pandas Timestamp for comparison
-        # Remove timezone info to match timezone-naive CSV data
-        start_ts = pd.Timestamp(start_time).tz_localize(None) if pd.Timestamp(start_time).tz else pd.Timestamp(start_time)
-        end_ts = pd.Timestamp(end_time).tz_localize(None) if pd.Timestamp(end_time).tz else pd.Timestamp(end_time)
-        
-        # Data should start at or before simulation start and end at or after simulation end
-        if data_start <= start_ts and data_end >= end_ts:
-            return True, file_path
+    filename = f"{reservoir_id}_Vertimiento_Serie.csv"
+
+    # ---- read climatology (baseline) ----
+    clim_path = os.path.join(da_climatology_path, filename)
+    df_clim = _parse_da_csv(clim_path)
+
+    # ---- read manual (override) ----
+    manual_path = os.path.join(da_manual_path, filename)
+    df_manual = _parse_da_csv(manual_path)
+
+    # ---- filter each to the simulation window ----
+    def _filter(df):
+        if df is None or df.empty:
+            return pd.DataFrame(columns=['datetime', 'value'])
+        mask = (df['datetime'] >= start_ts) & (df['datetime'] <= end_ts)
+        return df.loc[mask, ['datetime', 'value']].copy()
+
+    clim_filtered = _filter(df_clim)
+    manual_filtered = _filter(df_manual)
+
+    # If neither source has data, nothing to do
+    if clim_filtered.empty and manual_filtered.empty:
+        return None, 0, 0
+
+    # ---- If ANY manual entry exists in the window, fill ALL timesteps with it ----
+    if not manual_filtered.empty:
+        # Use climatology's index as the full timestep backbone
+        if not clim_filtered.empty:
+            full_index = clim_filtered.set_index('datetime').index
         else:
-            return False, None
-            
-    except Exception as e:
-        print(f"    Warning: Error reading {file_path}: {e}")
-        return False, None
+            # No climatology — build a 30-min index from start to end
+            full_index = pd.date_range(start=start_ts, end=end_ts, freq='30min')
+
+        # Place manual values onto the full index, then fill gaps in both directions
+        manual_series = manual_filtered.set_index('datetime')['value']
+        filled = manual_series.reindex(full_index)
+        filled = filled.ffill().bfill()  # forward-fill first, then backward-fill for leading gaps
+
+        manual_steps = len(filled)
+        climatology_steps = 0
+
+        result = pd.DataFrame({'datetime': filled.index, 'value': filled.values})
+        result['timestamp'] = result['datetime'].dt.strftime('%m/%d/%Y %H:%M')
+        return result[['timestamp', 'value']], manual_steps, climatology_steps
+
+    # ---- No manual data at all → use climatology entirely ----
+    clim_filtered = clim_filtered.set_index('datetime')
+    merged = clim_filtered.sort_index()
+
+    climatology_steps = len(merged)
+    manual_steps = 0
+
+    # Format timestamp back to MM/DD/YYYY HH:MM for output
+    merged = merged.reset_index()
+    merged['timestamp'] = merged['datetime'].dt.strftime('%m/%d/%Y %H:%M')
+    result = merged[['timestamp', 'value']]
+
+    return result, manual_steps, climatology_steps
 
 
 def create_simulation_csv_files(
@@ -108,177 +168,95 @@ def create_simulation_csv_files(
     da_climatology_path: str,
     da_simulation_path: str,
     start_time: datetime,
-    end_time: datetime
-) -> Tuple[int, int]:
+    end_time: datetime,
+) -> Tuple[int, int, int]:
     """
     Create individual CSV files for each reservoir in DA_Simulation folder.
-    
-    For each reservoir, extracts data from start_time to end_time from either
-    manual or climatology source and creates a CSV file in DA_Simulation.
-    
+
+    For each reservoir at each timestep, manual data is preferred.
+    If manual data is absent for that step, climatology data is used.
+
     Args:
         reservoirs: List of reservoir IDs
         da_manual_path: Path to manual DA data folder
         da_climatology_path: Path to climatology DA data folder
         da_simulation_path: Path to DA_Simulation output folder
         start_time: Simulation start time
-        end_time: Simulation end time (typically systemStartLRTime)
-        
+        end_time: Simulation end time (systemEndTime, includes dry run)
+
     Returns:
-        Tuple of (manual_count, climatology_count)
+        Tuple of (total_manual_steps, total_climatology_steps, gauges_processed)
     """
     print("    Creating individual CSV files for each reservoir in DA_Simulation:")
-    
+
     # Clean DA_Simulation folder
     if os.path.exists(da_simulation_path):
         shutil.rmtree(da_simulation_path)
     os.makedirs(da_simulation_path, exist_ok=True)
     print(f"      Cleaned and created DA_Simulation folder")
-    
-    manual_count = 0
-    climatology_count = 0
-    
+
     # Convert to timezone-naive pandas Timestamps
     start_ts = pd.Timestamp(start_time).tz_localize(None) if pd.Timestamp(start_time).tz else pd.Timestamp(start_time)
     end_ts = pd.Timestamp(end_time).tz_localize(None) if pd.Timestamp(end_time).tz else pd.Timestamp(end_time)
-    
+
+    total_manual = 0
+    total_climatology = 0
+    gauges_processed = 0
+
     for reservoir_id in reservoirs:
-        # Check manual data first
-        is_manual_available, _ = check_manual_da_availability(
-            reservoir_id, da_manual_path, start_time, end_time
+        result_df, m_steps, c_steps = _merge_manual_climatology(
+            reservoir_id, da_manual_path, da_climatology_path, start_ts, end_ts
         )
-        
-        # Determine source path
-        if is_manual_available:
-            source_path = os.path.join(da_manual_path, f"{reservoir_id}_Vertimiento_Serie.csv")
-            source_type = "manual"
-            manual_count += 1
-        else:
-            source_path = os.path.join(da_climatology_path, f"{reservoir_id}_Vertimiento_Serie.csv")
-            source_type = "climatology"
-            climatology_count += 1
-        
-        # Read and process the source data
-        try:
-            if not os.path.exists(source_path):
-                print(f"      Warning: Source file not found for {reservoir_id}: {source_path}")
-                continue
-            
-            df = pd.read_csv(source_path, header=None, names=['timestamp', 'value'])
-            
-            # Parse timestamps
-            try:
-                df['datetime'] = pd.to_datetime(df['timestamp'], format='%m/%d/%Y %H:%M')
-            except:
-                try:
-                    df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%m/%Y %H:%M')
-                except:
-                    df['datetime'] = pd.to_datetime(df['timestamp'])
-            
-            # Filter to simulation period
-            mask = (df['datetime'] >= start_ts) & (df['datetime'] <= end_ts)
-            df_filtered = df[mask].copy()
-            
-            if len(df_filtered) == 0:
-                print(f"      Warning: No data in range for {reservoir_id} ({source_type})")
-                continue
-            
-            # Create output file in DA_Simulation with same format as source
-            output_path = os.path.join(da_simulation_path, f"{reservoir_id}_Vertimiento_Serie.csv")
-            df_filtered[['timestamp', 'value']].to_csv(output_path, index=False, header=False)
-            
-            print(f"      {reservoir_id}: Created from {source_type} ({len(df_filtered)} records)")
-            
-        except Exception as e:
-            print(f"      Error: Failed to process {reservoir_id}: {e}")
+
+        if result_df is None or result_df.empty:
+            print(f"      {reservoir_id}: WARNING - no data in range")
             continue
-    
+
+        output_path = os.path.join(da_simulation_path, f"{reservoir_id}_Vertimiento_Serie.csv")
+        result_df.to_csv(output_path, index=False, header=False)
+
+        total_manual += m_steps
+        total_climatology += c_steps
+        gauges_processed += 1
+
+        # Per-gauge log
+        src_label = f"{m_steps} manual, {c_steps} climatology"
+        print(f"      {reservoir_id}: {len(result_df)} records ({src_label})")
+
     print(f"    CSV file creation complete:")
-    print(f"      - Using manual data: {manual_count} reservoirs")
-    print(f"      - Using climatology data: {climatology_count} reservoirs")
-    
-    return manual_count, climatology_count
+    print(f"      - Gauges processed: {gauges_processed}")
+    print(f"      - Total manual steps:      {total_manual}")
+    print(f"      - Total climatology steps:  {total_climatology}")
 
-
-def prepare_da_paths(
-    reservoirs: List[str],
-    da_manual_path: str,
-    da_climatology_path: str,
-    start_time: datetime,
-    end_time: datetime
-) -> Dict[str, str]:
-    """
-    Determine which DA path to use for each reservoir.
-    
-    Args:
-        reservoirs: List of reservoir IDs
-        da_manual_path: Path to manual DA data folder
-        da_climatology_path: Path to climatology DA data folder
-        start_time: Simulation start time
-        end_time: Simulation end time
-        
-    Returns:
-        Dictionary mapping reservoir_id -> obs_path
-    """
-    da_path_map = {}
-    manual_count = 0
-    climatology_count = 0
-    
-    print("    Checking DA data availability for each reservoir:")
-    
-    for reservoir_id in reservoirs:
-        is_available, manual_file = check_manual_da_availability(
-            reservoir_id, da_manual_path, start_time, end_time
-        )
-        
-        if is_available:
-            # Use manual data
-            relative_path = os.path.join(da_manual_path, f"{reservoir_id}_Vertimiento_Serie.csv")
-            da_path_map[reservoir_id] = relative_path
-            manual_count += 1
-        else:
-            # Fall back to climatology data
-            relative_path = os.path.join(da_climatology_path, f"{reservoir_id}_Vertimiento_Serie.csv")
-            da_path_map[reservoir_id] = relative_path
-            climatology_count += 1
-    
-    print(f"    DA path selection complete:")
-    print(f"      - Using manual data: {manual_count} reservoirs")
-    print(f"      - Using climatology data: {climatology_count} reservoirs")
-    
-    return da_path_map
+    return total_manual, total_climatology, gauges_processed
 
 
 def create_consolidated_da_csv(
     reservoirs: List[str],
-    da_path_map: Dict[str, str],
+    da_simulation_path: str,
     start_time: datetime,
     end_time: datetime,
     output_path: str,
     timestamp_str: str
-) -> str:
+) -> Optional[str]:
     """
     Create a consolidated CSV with all reservoir data for the simulation period.
-    
-    The consolidated CSV format is:
-        reservoir_id,timestamp,value
-        EMB2100002,01/01/2023 00:00,1.5
-        EMB2100002,01/01/2023 00:30,1.6
-        ...
-    
+
+    Reads from the already-merged DA_Simulation CSVs.
+
     Args:
         reservoirs: List of reservoir IDs
-        da_path_map: Dictionary mapping reservoir_id -> obs_path
+        da_simulation_path: Path to DA_Simulation folder (merged CSVs)
         start_time: Simulation start time
         end_time: Simulation end time
         output_path: Path to DA_Consolidated folder
-        timestamp_str: Timestamp string for output filename (e.g., '20230609_0000')
-        
+        timestamp_str: Timestamp string for output filename
+
     Returns:
-        Path to the created consolidated CSV file
+        Path to the created consolidated CSV file, or None if no data.
     """
     print("    Creating consolidated DA CSV file:")
-    
+
     # Clear previous consolidated CSVs
     pattern = os.path.join(output_path, "da.observations.*.csv")
     old_files = glob.glob(pattern)
@@ -288,58 +266,52 @@ def create_consolidated_da_csv(
             print(f"      Removed old consolidated file: {os.path.basename(old_file)}")
         except Exception as e:
             print(f"      Warning: Could not remove {old_file}: {e}")
-    
-    # Create new consolidated CSV
+
+    os.makedirs(output_path, exist_ok=True)
+
     consolidated_filename = f"da.observations.{timestamp_str}.csv"
     consolidated_path = os.path.join(output_path, consolidated_filename)
-    
+
+    start_ts = pd.Timestamp(start_time).tz_localize(None) if pd.Timestamp(start_time).tz else pd.Timestamp(start_time)
+    end_ts = pd.Timestamp(end_time).tz_localize(None) if pd.Timestamp(end_time).tz else pd.Timestamp(end_time)
+
     all_data = []
-    
+
     for reservoir_id in reservoirs:
-        obs_file = da_path_map[reservoir_id]
-        
+        obs_file = os.path.join(da_simulation_path, f"{reservoir_id}_Vertimiento_Serie.csv")
+
         if not os.path.exists(obs_file):
-            print(f"      Warning: File not found for {reservoir_id}: {obs_file}")
             continue
-        
+
         try:
-            # Read the reservoir data
             df = pd.read_csv(obs_file, header=None, names=['timestamp', 'value'])
-            
+
             # Parse timestamps
-            try:
-                df['datetime'] = pd.to_datetime(df['timestamp'], format='%m/%d/%Y %H:%M')
-            except:
+            for fmt in ('%m/%d/%Y %H:%M', '%d/%m/%Y %H:%M'):
                 try:
-                    df['datetime'] = pd.to_datetime(df['timestamp'], format='%d/%m/%Y %H:%M')
-                except:
-                    df['datetime'] = pd.to_datetime(df['timestamp'])
-            
-            # Convert Python datetime to pandas Timestamp for comparison
-            # Remove timezone info to match timezone-naive CSV data
-            start_ts = pd.Timestamp(start_time).tz_localize(None) if pd.Timestamp(start_time).tz else pd.Timestamp(start_time)
-            end_ts = pd.Timestamp(end_time).tz_localize(None) if pd.Timestamp(end_time).tz else pd.Timestamp(end_time)
-            
+                    df['datetime'] = pd.to_datetime(df['timestamp'], format=fmt)
+                    break
+                except Exception:
+                    continue
+            else:
+                df['datetime'] = pd.to_datetime(df['timestamp'])
+
             # Filter to simulation period
             mask = (df['datetime'] >= start_ts) & (df['datetime'] <= end_ts)
             df_filtered = df[mask].copy()
-            
-            # Add reservoir ID column
-            df_filtered['reservoir_id'] = reservoir_id
-            
+
+            if df_filtered.empty:
+                continue
+
             # Reformat timestamp to MM/DD/YYYY HH:MM
             df_filtered['timestamp_formatted'] = df_filtered['datetime'].dt.strftime('%m/%d/%Y %H:%M')
-            
-            # Select columns in correct order: reservoir_id, timestamp, value
-            df_output = df_filtered[['reservoir_id', 'timestamp_formatted', 'value']]
-            
-            all_data.append(df_output)
-            
+            df_filtered['reservoir_id'] = reservoir_id
+
+            all_data.append(df_filtered[['reservoir_id', 'timestamp_formatted', 'value']])
         except Exception as e:
             print(f"      Warning: Error processing {reservoir_id}: {e}")
             continue
-    
-    # Combine all data and write to file
+
     if all_data:
         consolidated_df = pd.concat(all_data, ignore_index=True)
         consolidated_df.to_csv(consolidated_path, index=False, header=False)
@@ -363,54 +335,49 @@ def process_da_for_simulation(
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Main function to orchestrate DA data preparation for a simulation.
-    
+
+    For each gauge at each timestep, manual data is preferred over climatology.
+    DA covers the full simulation period (start_time to end_time) including
+    the dry-run tail.
+
     Args:
         da_list_path: Path to reservoir list file
         da_manual_path: Path to manual DA data folder
         da_climatology_path: Path to climatology DA data folder
         da_consolidated_path: Path to consolidated output folder
         da_simulation_path: Path to DA_Simulation folder for individual CSVs
-        start_time: Simulation start time
-        end_time: Simulation end time (typically systemStartLRTime)
+        start_time: Simulation start time (systemStartTime, may include warmup)
+        end_time: Simulation end time (systemEndTime, includes dry run)
         timestamp_str: Timestamp string for output filename
-        
+
     Returns:
         Tuple of (da_simulation_path, consolidated_csv_path)
-        - da_simulation_path: Path to DA_Simulation folder (for control file reference)
-        - consolidated_csv_path: Path to consolidated CSV file
     """
     print("***_________Processing Data Assimilation (DA) data_________***")
-    
+
     # Read reservoir list
     reservoirs = read_reservoir_list(da_list_path)
-    
-    # Create individual CSV files in DA_Simulation
-    manual_count, climatology_count = create_simulation_csv_files(
-        reservoirs, da_manual_path, da_climatology_path, 
+
+    # Create merged individual CSV files in DA_Simulation
+    total_manual, total_climatology, gauges_ok = create_simulation_csv_files(
+        reservoirs, da_manual_path, da_climatology_path,
         da_simulation_path, start_time, end_time
     )
-    
-    # Prepare path map for consolidated CSV (using DA_Simulation files)
-    da_path_map = {}
-    for reservoir_id in reservoirs:
-        relative_path = os.path.join(da_simulation_path, f"{reservoir_id}_Vertimiento_Serie.csv")
-        da_path_map[reservoir_id] = relative_path
-    
-    # Create consolidated CSV
+
+    # Create consolidated CSV from the already-merged simulation files
     consolidated_csv_path = create_consolidated_da_csv(
-        reservoirs, da_path_map, start_time, end_time,
+        reservoirs, da_simulation_path, start_time, end_time,
         da_consolidated_path, timestamp_str
     )
-    
+
     print("***_________DA data processing complete_________***")
     print("")
-    
+
     return da_simulation_path, consolidated_csv_path
 
 
 __all__ = [
     'read_reservoir_list',
-    'check_manual_da_availability',
     'create_simulation_csv_files',
     'create_consolidated_da_csv',
     'process_da_for_simulation',

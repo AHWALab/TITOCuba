@@ -30,7 +30,7 @@ import traceback
 from tito_utils.file_utils import cleanup_precip, newline
 from tito_utils.qpe_utils import get_new_precip
 from tito_utils.qpf_utils import run_convlstm, download_GFS, GFS_searcher, WRF_searcher 
-from tito_utils.ef5 import prepare_ef5, run_ef5_simulation
+from tito_utils.ef5 import prepare_ef5, run_ef5_simulation, find_available_states
 from tito_utils.highres_utils import prepare_highres_control
 from tito_utils.da_utils import process_da_for_simulation
 print(">>> Modules imported")
@@ -120,6 +120,11 @@ def main(args):
     DA_consolidated_path = getattr(config_file, "DA_consolidated_path", "DA_Consolidated/")
     DA_simulation_path = getattr(config_file, "DA_simulation_path", "DA_Simulation/")
     DA_list_path = getattr(config_file, "DA_list_path", "templates/DA_list.txt")
+    run_nowCastOnly = getattr(config_file, "run_nowCastOnly", False)
+    nowCastOnly_dataPath = getattr(config_file, "nowCastOnly_dataPath", "nowCastOnly/")
+    nowCastOnly_tmpOutput = getattr(config_file, "nowCastOnly_tmpOutput", nowCastOnly_dataPath + "tmp_output_" + config_file.systemModel + "/")
+    nowCastOnly_highres_dataPath = getattr(config_file, "nowCastOnly_highres_dataPath", "nowCastOnly_25m/")
+    nowCastOnly_highres_tmpOutput = getattr(config_file, "nowCastOnly_highres_tmpOutput", nowCastOnly_highres_dataPath + "tmp_output_" + config_file.systemModel + "_25m/")
     SEND_ALERTS = config_file.SEND_ALERTS
     alert_recipients = config_file.alert_recipients
     HindCastMode = config_file.HindCastMode
@@ -127,6 +132,7 @@ def main(args):
     LR_run = config_file.run_LR
     LR_TimeStep = config_file.LR_timestep
     GFS_archive_path = config_file.QPF_archive_path
+    warmup_days = getattr(config_file, "warmup_days", 0)
     email_gpm = config_file.email_gpm
     server = config_file.server
     smtp_config = {
@@ -165,10 +171,16 @@ def main(args):
     systemStartTime = currentTime - timedelta(hours=4.5) 
     # Save states for the current run with the current time step's timestamp
     systemStateEndTime = currentTime - timedelta(hours=4) #change to 4
-    # Run warm up using the last hour of data until the current time step
-    systemWarmEndTime = currentTime - timedelta(hours=4)
     # Only check for states as far as we have QPs (6 hours)
     failTime = currentTime - timedelta(hours=6)
+    # Warmup end time: if warmup_days is configured and no states are found,
+    # the simulation will start warmup_days earlier and warm up until systemStartTime.
+    # The actual adjustment of systemStartTime happens in prepare_ef5 when states are not found.
+    if warmup_days > 0:
+        systemWarmEndTime = systemStartTime  # warmup runs from (systemStartTime - warmup_days) to systemStartTime
+        print(f"    Warmup configured: {warmup_days} day(s) if no states found")
+    else:
+        systemWarmEndTime = currentTime - timedelta(hours=4)  # default: minimal warmup
     
     systemStartLRTime = dt.strptime(config_file.StartLRtime,"%Y-%m-%d %H:%M")
     EndLRTime = dt.strptime(config_file.EndLRTime,"%Y-%m-%d %H:%M")
@@ -184,20 +196,39 @@ def main(args):
         systemEndTime = EndLRTime + timedelta(hours=6) #4 hours dry after gfs
     if not HindCastMode and not LR_run:
         systemEndTime = currentTime + timedelta(hours=6) #si no corro gfs y hindcast no 
+    
+    ###-------------------------- EARLY STATE CHECK --------------------------------
+    # Check for states early so we know if warmup is needed BEFORE downloading precip and DA
+    print("***_________Checking for available model states_________***")
+    foundAllStates, _ = find_available_states(statesPath, modelStates, systemStartTime, failTime)
+    
+    if not foundAllStates and warmup_days > 0:
+        warmupStartTime = systemStartTime - timedelta(days=warmup_days)
+        print(f"    No states found. Extending simulation start for {warmup_days}-day warmup.")
+        print(f"    Original start: {systemStartTime.strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Warmup start:   {warmupStartTime.strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Warmup end:     {systemWarmEndTime.strftime('%Y-%m-%d %H:%M')}")
+        # Push systemStartTime back for precip download, DA, and EF5
+        systemStartTime = warmupStartTime
+    elif foundAllStates:
+        print(f"    States found. No warmup needed.")
+    else:
+        print(f"    No states found and warmup_days=0. Proceeding without extended warmup.")
+    newline(2)
         
     ###-------------------------- START ROUTINES --------------------------------
     try:
         # Clean up old QPE files from GeoTIFF archive (older than 6 hours)
         # Keep latest QPFs
         print("***_________Cleaning old QPE files from the precip folder_________***")
-        cleanup_precip(currentTime, precipFolder, qpf_store_path)
+        cleanup_precip(currentTime, precipFolder, qpf_store_path, oldest_keep_time=systemStartTime)
         newline(1)
         print("***_________Precip folder cleaning completed_________***")
         newline(2)
         
         # Get the necessary QPEs and QPFs for the current time step into the GeoTIFF precip folder store whether there's a QPE gap or the QPEs for the current time step is missing
         print("***_________Retrieving IMERG files_________***")
-        get_new_precip(currentTime, server, precipFolder, email_gpm, HindCastMode, qpf_store_path, xmin, ymin, xmax, ymax)
+        get_new_precip(currentTime, server, precipFolder, email_gpm, HindCastMode, qpf_store_path, xmin, ymin, xmax, ymax, system_start_time=systemStartTime)
         newline(1)
         print("***_________IMERG files are complete in precip folder_________***")
         newline(2)
@@ -243,7 +274,8 @@ def main(args):
     
     if run_withDA:
         try:
-            # Process DA data for the simulation period (up to forecast start time)
+            # Process DA data for the full simulation period (including dry run)
+            # For each gauge at each timestep: manual data preferred, else climatology
             output_timestamp_str = currentTime.strftime("%Y%m%d_%H%M")
             da_simulation_path, consolidated_csv_path = process_da_for_simulation(
                 DA_list_path,
@@ -252,7 +284,7 @@ def main(args):
                 DA_consolidated_path,
                 DA_simulation_path,
                 systemStartTime,
-                systemStartLRTime,
+                systemEndTime,       # Full simulation including dry run
                 output_timestamp_str
             )
             newline(2)
@@ -311,6 +343,7 @@ def main(args):
                     gauge_list_path=highres_gauge_list,
                     threshold=highres_threshold,
                     gauge_name_prefix=f"{subdomain}_{highres_resolution_tag}",
+                    enable_da=run_withDA,
                 )
             except Exception as exc:
                 print(f"High-res preprocessing failed: {exc}")
@@ -345,7 +378,7 @@ def main(args):
                     LR_TimeStep,
                     LR_run,
                     highres_selection=selection,
-                    consolidated_csv_path=None,
+                    consolidated_csv_path=consolidated_csv_path,  # Use same DA file as 1km
                 )
                 print(f"    Running high-res simulation with {highres_resolution_tag} grids")
                 run_ef5_simulation(
@@ -363,7 +396,139 @@ def main(args):
                     f"needs at least {highres_min_gauges})."
                 )
     
+    ###-------------------------- NOWCAST-ONLY SIMULATION SECTION --------------------------------
+    # NowCast-Only is only meaningful when LR (GFS) is enabled, otherwise
+    # the main simulation is already IMERG-only and this would be redundant.
+    if run_nowCastOnly and not LR_run:
+        print("NowCast-Only simulation skipped: LR (GFS) is disabled so the main simulation is already IMERG-only.")
+    
+    if run_nowCastOnly and LR_run:
+        newline(2)
+        print("***=========================================================================***")
+        print("***_________Starting NowCast-Only (IMERG-only) Simulation_________***")
+        print("***=========================================================================***")
+        
+        # NowCast-only timing: same start, ends at currentTime + 6h dry run (no GFS)
+        nc_systemEndTime = currentTime + timedelta(hours=6)
+        nc_LR_run = False
+        
+        print(f"    NowCast-only simulation period: {systemStartTime.strftime('%Y-%m-%d %H:%M')} to {nc_systemEndTime.strftime('%Y-%m-%d %H:%M')}")
+        print(f"    Using same IMERG/nowcast precipitation (no GFS forecast)")
+        newline(1)
+        
+        # Prepare and run NowCast-only 1km EF5 simulation
+        print("***_________Preparing the NowCast-Only EF5 run_________***")
+        nc_realSystemStartTime, nc_controlFile, nc_run_output_path = prepare_ef5(
+            precipEF5Folder, precipFolder, statesPath, modelStates,
+            systemStartTime, failTime, currentTime, systemName, SEND_ALERTS,
+            alert_recipients, smtp_config, nowCastOnly_tmpOutput, nowCastOnly_dataPath,
+            subdomain, systemModel, templatePath, template, currentTime,
+            systemWarmEndTime, systemStateEndTime, nc_systemEndTime, LR_TimeStep, nc_LR_run,
+            consolidated_csv_path=consolidated_csv_path)
+        
+        print(f"    Running NowCast-only simulation for: {currentTime.strftime('%Y%m%d_%H%M')}")
+        print(f"    Simulations start at: {nc_realSystemStartTime.strftime('%Y%m%d_%H%M')} and ends at: {nc_systemEndTime.strftime('%Y%m%d_%H%M')}")
+        
+        print("***_________NowCast-Only EF5 is ready to be run_________***")
+        
+        run_ef5_simulation(ef5Path, nc_run_output_path, nc_controlFile, output_timestamp_str)
+        newline(2)
+        print("******** NowCast-Only EF5 Outputs are ready!!! ********")
+        
+        # High-res rerun for NowCast-only simulation (if enabled)
+        if run_highres:
+            nc_maxunitq_path = os.path.join(nc_run_output_path, f"maxunitq.{output_timestamp_str}.tif")
+            highres_template_path = os.path.join(templatePath, highres_template)
+            nc_prerequisites = []
+            if not highres_maskgrid:
+                nc_prerequisites.append("mask grid path not set")
+            elif not os.path.exists(highres_maskgrid):
+                nc_prerequisites.append(f"mask grid missing ({highres_maskgrid})")
+            if not highres_gauge_list:
+                nc_prerequisites.append("gauge list path not set")
+            elif not os.path.exists(highres_gauge_list):
+                nc_prerequisites.append(f"gauge list missing ({highres_gauge_list})")
+            if not os.path.exists(highres_template_path):
+                nc_prerequisites.append(f"high-res template missing ({highres_template_path})")
+            
+            if nc_prerequisites:
+                print("NowCast-Only high-res EF5 rerun skipped due to configuration issues:")
+                for issue in nc_prerequisites:
+                    print(f"    - {issue}")
+            else:
+                nc_selection = None
+                try:
+                    nc_selection = prepare_highres_control(
+                        maxunitq_path=nc_maxunitq_path,
+                        mask_grid_path=highres_maskgrid,
+                        gauge_list_path=highres_gauge_list,
+                        threshold=highres_threshold,
+                        gauge_name_prefix=f"{subdomain}_{highres_resolution_tag}",
+                        enable_da=run_withDA,
+                    )
+                except Exception as exc:
+                    print(f"NowCast-Only high-res preprocessing failed: {exc}")
+                
+                nc_selected_count = nc_selection.count if nc_selection else 0
+                if nc_selection and nc_selected_count >= max(1, highres_min_gauges):
+                    newline(1)
+                    print(f"***_________Preparing the NowCast-Only high-resolution EF5 run ({nc_selected_count} gauges)_________***")
+                    _sync_highres_states(statesPath, statesHighResPath, highres_state_models)
+                    nc_hr_real_start, nc_hr_control_file, nc_hr_run_output_path = prepare_ef5(
+                        precipEF5Folder,
+                        precipFolder,
+                        statesHighResPath,
+                        highres_state_models,
+                        systemStartTime,
+                        failTime,
+                        currentTime,
+                        systemName,
+                        SEND_ALERTS,
+                        alert_recipients,
+                        smtp_config,
+                        nowCastOnly_highres_tmpOutput,
+                        nowCastOnly_highres_dataPath,
+                        subdomain,
+                        systemModel,
+                        templatePath,
+                        highres_template,
+                        currentTime,
+                        systemWarmEndTime,
+                        systemStateEndTime,
+                        nc_systemEndTime,
+                        LR_TimeStep,
+                        nc_LR_run,
+                        highres_selection=nc_selection,
+                        consolidated_csv_path=consolidated_csv_path,
+                    )
+                    print(f"    Running NowCast-Only high-res simulation with {highres_resolution_tag} grids")
+                    run_ef5_simulation(
+                        ef5Path,
+                        nc_hr_run_output_path,
+                        nc_hr_control_file,
+                        output_timestamp_str,
+                        resolution_tag=highres_resolution_tag,
+                    )
+                    newline(1)
+                    print("******** NowCast-Only High-resolution EF5 Outputs are ready!!! ********")
+                else:
+                    print(
+                        f"NowCast-Only high-res EF5 rerun skipped (selected {nc_selected_count} gauge(s), "
+                        f"needs at least {highres_min_gauges}).")
+    
     ###-------------------------- FINAL CLEANUP --------------------------------
+    # Clean precipEF5 folder after all simulations are done
+    print("***_________Cleaning precipEF5 folder_________***")
+    try:
+        removed_ef5 = 0
+        for f in glob.glob(os.path.join(precipEF5Folder, "*")):
+            os.remove(f)
+            removed_ef5 += 1
+        print(f"    Removed {removed_ef5} file(s) from {precipEF5Folder}")
+    except Exception as e:
+        print(f"    Warning: Error cleaning precipEF5 folder: {e}")
+    newline(1)
+    
     # Remove any duplicated IMERG files created during this run
     # This ensures the next run starts with only real IMERG data
     newline(2)

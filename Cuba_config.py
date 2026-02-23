@@ -12,7 +12,7 @@ ymin = 3.5
 ymax = 39.5
 nowcast_model_name = "convlstm" 
 systemName = systemModel.upper() + " " + domain.upper() + " " + subdomain.upper()
-ef5Path = "put EF5 executable path here example - /home/naman/EF5/EF5LatestRelease/EF5/bin/ef5"
+ef5Path = "/home/naman/EF5/EF5LatestRelease/EF5/bin/ef5"
 statesPath = "states/"
 statesHighResPath = "statesHighRes/"
 precipFolder = "precip/"
@@ -44,6 +44,15 @@ DA_consolidated_path = "DA_Consolidated/"
 DA_simulation_path = "DA_Simulation/"
 DA_list_path = "templates/DA_list.txt"
 
+# NowCast-Only simulation (IMERG-only rerun after the main GFS simulation)
+# When enabled, an additional EF5 simulation is run using only IMERG/nowcast
+# precipitation (no GFS forecast), ending at current time + 6h dry run.
+run_nowCastOnly = True
+nowCastOnly_dataPath = "nowCastOnly/"
+nowCastOnly_tmpOutput = nowCastOnly_dataPath + "tmp_output_" + systemModel + "/"
+nowCastOnly_highres_dataPath = "nowCastOnly_25m/"
+nowCastOnly_highres_tmpOutput = nowCastOnly_highres_dataPath + "tmp_output_" + systemModel + "_25m/"
+
 #Alerts configuration
 SEND_ALERTS = False
 smtp_server = "smtp.gmail.com"
@@ -54,17 +63,22 @@ alert_sender = "Real Time Model Alert" # can also be the same as account_address
 alert_recipients = ["fixer1@company.com", "fixer2@company.com", "panic@company.com",...]
 copyToWeb = False
 
+# Warmup configuration
+# Number of days of warmup to run when no valid states are found.
+# Set to 0 to use the default behavior (start from systemStartTime with no extended warmup).
+warmup_days = 5
+
 #Simulation times 
 """
 If Hindcast and LR_mode is True, user MUST define StartLRtime, EndLRTime, LR_timestep,GFS_archive_path
 If running in operational mode (Hindcast False) and LR_mode = True, user only have to define LR_timestep, GFS_archive_path
 """
-HindCastMode = False
-HindCastDate = "2023-06-09 00:00" #"%Y-%m-%d %H:%M" UTC
+HindCastMode = True
+HindCastDate = "2023-06-07 01:00" #"%Y-%m-%d %H:%M" UTC
 
 run_LR = True
-StartLRtime = "2023-06-09 00:00" #"%Y-%m-%d %H:%M" UTC. Date of first QPF file
-EndLRTime = "2023-06-10 00:00" #"%Y-%m-%d %H:%M" UTC. Date of last QPF file
+StartLRtime = "2023-06-07 01:00" #"%Y-%m-%d %H:%M" UTC. Date of first QPF file
+EndLRTime = "2023-06-08 01:00" #"%Y-%m-%d %H:%M" UTC. Date of last QPF file
 LR_timestep = "60u"
 # Path to archived GFS GeoTIFFs used by LR/QPF. Must point to the in-repo folder
 # that actually contains the files (see precip/GFS/GFSData/ in this repo).
@@ -73,5 +87,5 @@ LR_timestep = "60u"
 QPF_archive_path = "precip/GFS"
 
 # Email associated to GPM account
-email_gpm = 'put the registered email here'
+email_gpm = 'vrobledodelgado@uiowa.edu'
 server = 'https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg/gis/early/'

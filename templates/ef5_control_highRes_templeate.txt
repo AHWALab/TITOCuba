@@ -185,7 +185,7 @@ alpha0=1.0
 beta=1.0
 under=0.001
 leaki=0.03
-th=19200
+th=2600
 isu=0.0
 
 [simpleinundationparamset fim]
@@ -202,6 +202,7 @@ MODEL=crest
 ROUTING=KW
 BASIN=0
 PRECIP=IMERG
+DA_FILE=DA_Consolidated/da.observations.csv
 PET=CLIMO
 OUTPUT={OUTPUTPATH}
 STATES={STATESPATH}
@@ -223,6 +224,7 @@ MODEL=crest
 ROUTING=KW
 BASIN=0
 PRECIP=IMERG
+DA_FILE=DA_Consolidated/da.observations.csv
 PRECIPFORECAST=GFS
 PET=CLIMO
 OUTPUT={OUTPUTPATH}
