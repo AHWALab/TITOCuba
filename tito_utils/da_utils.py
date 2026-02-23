@@ -84,9 +84,12 @@ def _merge_manual_climatology(
     """
     Build a merged timeseries for one reservoir.
 
-    At every timestep within [start_ts, end_ts]:
-        - if manual data exists for that timestep, use it
-        - otherwise fall back to climatology
+    If ANY manual entry falls within [start_ts, end_ts]:
+        - Use the climatology's timestep index as the backbone
+        - Fill ALL timesteps with the manual value (forward-fill then backward-fill)
+          so even a single manual observation covers the entire simulation period
+    If NO manual entries exist in the window:
+        - Fall back entirely to climatology
 
     Args:
         reservoir_id: e.g. 'EMB2100002'
@@ -123,31 +126,33 @@ def _merge_manual_climatology(
     if clim_filtered.empty and manual_filtered.empty:
         return None, 0, 0
 
-    # ---- merge: manual takes priority ----
-    # Index both by datetime for easy override
+    # ---- If ANY manual entry exists in the window, fill ALL timesteps with it ----
     if not manual_filtered.empty:
-        manual_filtered = manual_filtered.set_index('datetime')
-        manual_filtered['source'] = 'manual'
-    else:
-        manual_filtered = pd.DataFrame(columns=['value', 'source'])
-        manual_filtered.index.name = 'datetime'
+        # Use climatology's index as the full timestep backbone
+        if not clim_filtered.empty:
+            full_index = clim_filtered.set_index('datetime').index
+        else:
+            # No climatology — build a 30-min index from start to end
+            full_index = pd.date_range(start=start_ts, end=end_ts, freq='30min')
 
-    if not clim_filtered.empty:
-        clim_filtered = clim_filtered.set_index('datetime')
-        clim_filtered['source'] = 'climatology'
-    else:
-        clim_filtered = pd.DataFrame(columns=['value', 'source'])
-        clim_filtered.index.name = 'datetime'
+        # Place manual values onto the full index, then fill gaps in both directions
+        manual_series = manual_filtered.set_index('datetime')['value']
+        filled = manual_series.reindex(full_index)
+        filled = filled.ffill().bfill()  # forward-fill first, then backward-fill for leading gaps
 
-    # Combine: manual overwrites climatology at matching timestamps
-    merged = clim_filtered.combine_first(manual_filtered)
-    # But we want manual to WIN, so re-overlay manual on top
-    merged.update(manual_filtered)
+        manual_steps = len(filled)
+        climatology_steps = 0
 
-    merged = merged.sort_index()
+        result = pd.DataFrame({'datetime': filled.index, 'value': filled.values})
+        result['timestamp'] = result['datetime'].dt.strftime('%m/%d/%Y %H:%M')
+        return result[['timestamp', 'value']], manual_steps, climatology_steps
 
-    manual_steps = int((merged['source'] == 'manual').sum())
-    climatology_steps = int((merged['source'] == 'climatology').sum())
+    # ---- No manual data at all → use climatology entirely ----
+    clim_filtered = clim_filtered.set_index('datetime')
+    merged = clim_filtered.sort_index()
+
+    climatology_steps = len(merged)
+    manual_steps = 0
 
     # Format timestamp back to MM/DD/YYYY HH:MM for output
     merged = merged.reset_index()
