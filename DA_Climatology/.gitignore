@@ -1,0 +1,2 @@
+# Ignore data CSV files - they live on the server, not in git
+*.csv
