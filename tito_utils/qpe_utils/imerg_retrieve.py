@@ -66,7 +66,7 @@ def get_gpm_files(precipFolder, initial_timestamp, final_timestamp, ppt_server_p
     #path server
     server = ppt_server_path
     file_prefix = '3B-HHR-E.MS.MRG.3IMERG.'
-    file_suffix = '.V07B.30min.tif'
+    file_suffix = '.V07C.30min.tif'
     
     final_date = final_timestamp + timedelta(minutes=30)
     delta_time = datetime.timedelta(minutes=30)
