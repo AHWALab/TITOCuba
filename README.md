@@ -1,179 +1,181 @@
-# Threading Inputs to Outputs (TITO): 
+# Threading Inputs to Outputs (TITO)
 
-TITO is a framework designed to run the EF5 hydrologic model operationally, integrating satellite data, machine learning techniques and NWP products to support real-time forecasting and hydrologic analysis.
+English version: [README.en.md](README.en.md)
 
-## Installation Instructions
-**1. Clone the repository**
+TITO es un marco de trabajo diseñado para ejecutar operativamente el modelo hidrológico EF5, integrando datos satelitales, técnicas de aprendizaje automático y productos de predicción numérica del tiempo para apoyar el pronóstico en tiempo real y el análisis hidrológico.
+
+## Instrucciones de instalación
+**1. Clonar el repositorio**
   ```sh
   git clone https://github.com/AHWALab/TITOCuba.git
   ```
-**2. Navigate to the repository folder**
+**2. Ir a la carpeta del repositorio**
   ```sh
   cd TITOCuba/
   ```
-**3. Run the set up code**
-   This step might take few minutes. 
+**3. Ejecutar el script de configuración**
+   Este paso puede tardar unos minutos.
   ```sh
   bash setup_tito.sh
   ```
 
-**Note:** The setup script automatically downloads and extracts all required data files from Zenodo (basic/, parameters/, and DA_Climatology/ folders). If you prefer to do this manually or if the automatic download fails, follow the steps below:
+**Nota:** El script de instalación descarga y extrae automáticamente todos los archivos de datos requeridos desde Zenodo (carpetas basic/, parameters/ y DA_Climatology/). Si prefiere hacerlo manualmente o si la descarga automática falla, siga los pasos a continuación:
 
 <details>
-<summary><b>Manual data download instructions (optional)</b></summary>
+<summary><b>Instrucciones para la descarga manual de datos (opcional)</b></summary>
 
-**4. Getting the files ready (Manual method)**
+**4. Preparar los archivos (método manual)**
 
-- The 25m DEMs are large in size so they are provided in the following [Zenodo link](https://zenodo.org/records/17716930). After downloading, all the TIF files should be extracted to the `basic/` folder.
-- Similarly, parameters and precomputed Data Assimilation CSV files are also provided on Zenodo. The parameters zip should be extracted in the `parameters/` folder and Data Assimilation data should be extracted in the `DA_Climatology/` folder.
+- Los MDE de 25 m son de gran tamaño, por lo que se proporcionan en el siguiente [enlace de Zenodo](https://zenodo.org/records/17716930). Después de descargarlos, todos los archivos TIF deben extraerse en la carpeta `basic/`.
+- Del mismo modo, los parámetros y los archivos CSV precalculados de asimilación de datos también se proporcionan en Zenodo. El archivo zip de parámetros debe extraerse en la carpeta `parameters/` y los datos de asimilación de datos deben extraerse en la carpeta `DA_Climatology/`.
 
 </details>
 
-**Note:** If the setup script could not set the EF5 executable path automatically, please update it manually in `Cuba_config.py` in the following variable:
+**Nota:** Si el script de instalación no pudo configurar automáticamente la ruta del ejecutable de EF5, actualícela manualmente en `Cuba_config.py` en la siguiente variable:
 `ef5Path = "put EF5 executable path here example - /home/naman/EF5/EF5LatestRelease/EF5/bin/ef5"`
 
-After installation, ensure that your TITO folder contains the following subdirectories and files.
+Después de la instalación, asegúrese de que su carpeta de TITO contenga los siguientes subdirectorios y archivos.
 
-## Repository structure
+## Estructura del repositorio
 
-This repository is designed to run EF5 operationally over Cuba. 
+Este repositorio está diseñado para ejecutar EF5 de forma operativa sobre Cuba.
 
-### Key Files & Folders
-- **`Cuba_config.py`** – Configuration file to set up your operational run.
-- **`orchestrator.py`** – Main Python script that manages the entire workflow.
-- **`pipeline.sh`** – Bash script that activates the `tito_env` Conda environment and executes `orchestrator.py` using settings from `Cuba_config.py`.
+### Archivos y carpetas principales
+- **`Cuba_config.py`** - Archivo de configuración para preparar la ejecución operativa.
+- **`orchestrator.py`** - Script principal de Python que gestiona todo el flujo de trabajo.
+- **`pipeline.sh`** - Script de Bash que activa el entorno Conda `tito_env` y ejecuta `orchestrator.py` usando la configuración de `Cuba_config.py`.
 
-### Input / Output Directories
-- **`basic/`** – Contains DEM, FAC, and FDIR files.
-- **`pet/`** – Contains monthly PET (Potential Evapotranspiration) grids.
-- **`parameters/`** – Contains distributed parameters for the KW and CREST models.
-- **`states/`** – Stores model state files generated during operational runs.
-- **`statesHighRes/`** – Stores states generated from the 1 km run for use in the 25 m model.
-- **`outputs/`** – Output folder where simulation results are saved.
-- **`outputs_25m/`** – Output folder where 25 m simulation results are saved.
-- **`precip/`** – IMERG QPE files are downloaded here; nowcast files generated by the nowcasting system are also stored here.
-- **`precipEF5/`** – QPE and QPE_nowcast-based files are reformatted and copied here to be ingested by EF5.
-- **`DA_Climatology/`** – Contains precomputed averaged reservoir data for data assimilation from December 2025 to January 2031. This data is used when no observed data is manually provided for the reservoirs.
-- **`DA_Manual/`** – Stores manually entered observed reservoir data for data assimilation. If data is present for the current simulation period, it will be used instead of the climatology data.
-- **`DA_Consolidated/`** – TITO automatically creates a consolidated list of observed data for all reservoirs by selecting either precomputed climatology or manual data. This file is refreshed with every simulation run.
-- **`DA_Simulation/`** – TITO automatically generates individual CSV files for each reservoir containing observed data for the current simulation period. These files are refreshed with every simulation run.
-- **`templates/`** – Stores EF5 control file templates, which are dynamically updated during each run.
-- **`qpf_store/`** – Stores QPF files for using during QPF-based runs.
-- **`Nowcast/`** – Contains machine learning routines used to generate QPF forecasts.
-- **`tito_utils/`** – Collection of utility modules and helper scripts used internally by TITO.
+### Directorios de entrada y salida
+- **`basic/`** - Contiene archivos DEM, FAC y FDIR.
+- **`pet/`** - Contiene rejillas mensuales de PET (evapotranspiración potencial).
+- **`parameters/`** - Contiene parámetros distribuidos para los modelos KW y CREST.
+- **`states/`** - Almacena los archivos de estado del modelo generados durante las ejecuciones operativas.
+- **`statesHighRes/`** - Almacena los estados generados en la ejecución de 1 km para usarlos en el modelo de 25 m.
+- **`outputs/`** - Carpeta de salida donde se guardan los resultados de simulación.
+- **`outputs_25m/`** - Carpeta de salida donde se guardan los resultados de simulación a 25 m.
+- **`precip/`** - Aquí se descargan los archivos IMERG QPE; también se almacenan aquí los archivos de nowcast generados por el sistema de pronóstico inmediato.
+- **`precipEF5/`** - Aquí se reformatean y copian los archivos basados en QPE y QPE_nowcast para que EF5 pueda ingerirlos.
+- **`DA_Climatology/`** - Contiene datos promedio precalculados de embalses para asimilación de datos desde diciembre de 2025 hasta enero de 2031. Estos datos se usan cuando no se proporcionan observaciones manuales para los embalses.
+- **`DA_Manual/`** - Almacena datos observados de embalses ingresados manualmente para la asimilación de datos. Si existen datos para el período de simulación actual, se usarán en lugar de los datos climatológicos.
+- **`DA_Consolidated/`** - TITO crea automáticamente una lista consolidada de datos observados para todos los embalses seleccionando datos climatológicos precalculados o datos manuales. Este archivo se actualiza en cada ejecución.
+- **`DA_Simulation/`** - TITO genera automáticamente archivos CSV individuales para cada embalse con datos observados correspondientes al período de simulación actual. Estos archivos se actualizan en cada ejecución.
+- **`templates/`** - Almacena plantillas de archivos de control de EF5, que se actualizan dinámicamente en cada ejecución.
+- **`qpf_store/`** - Almacena archivos QPF para utilizarlos en ejecuciones basadas en QPF.
+- **`Nowcast/`** - Contiene rutinas de aprendizaje automático utilizadas para generar pronósticos QPF.
+- **`tito_utils/`** - Colección de módulos utilitarios y scripts auxiliares usados internamente por TITO.
 
-## How to run?
-**1. Edit the config file:**
-After completing the installation of the required environment and populating the corresponding EF5 folders, open `Cuba_config.py` file. There are few lines users need to change in this config file to run TITO successfully:
-- **ef5Path:** Make sure the EF5 executable path is correctly placed. If the setup script did not set it automatically, please update this path to the corresponding ef5's binary path in your system.
-- **HindCastMode:** If you are running an event happened in the PAST, set `HindCastMode = True` and write the date of interest in `HindCastDate`, use the format "YYYY-MM-DD HH:MM". If you want to run it in Nowcast Mode (meaning TITO will start running in the present time) set `HindCastMode = False`
-- **run_LR:** To include QPF in the simulation (options are GFS or WRF), set `run_LR = True`.  
-  - If the simulation is for a **past event** (`HindCastMode = True`), you must provide:  
-    - QPF start date (`StartLRtime`)  
-    - QPF end date (`EndLRtime`)  
-    - QPF time step (`LR_timestep`) in minutes, e.g., `30u`  
-    - Path to your QPF archive (`QPF_archive_path`)  
-  - If you are activating this option for **real-time operations**, TITO uses a predefined QPF time. You can check `orchestrator.py` to customize it for your convenience.
-- **email_gpm:** This version of TITO uses IMERG Early V07 as QPE. You will need to create an account on the GPM server to download precipitation files. Please visit the [NASA GPM registration web page](https://registration.pps.eosdis.nasa.gov/registration/) and follow the instructions provided on the webpage. **Important:** Use your registration email as the password so TITO can use it in the routines.
+## ¿Cómo ejecutar TITO?
+**1. Editar el archivo de configuración:**
+Después de completar la instalación del entorno requerido y de poblar las carpetas correspondientes de EF5, abra el archivo `Cuba_config.py`. Hay algunas líneas que el usuario debe modificar en este archivo para ejecutar TITO correctamente:
+- **ef5Path:** Asegúrese de que la ruta al ejecutable de EF5 esté correctamente definida. Si el script de instalación no la configuró automáticamente, actualice esta ruta con la correspondiente al binario de EF5 en su sistema.
+- **HindCastMode:** Si va a ejecutar un evento ocurrido en el PASADO, defina `HindCastMode = True` y escriba la fecha de interés en `HindCastDate`, usando el formato "YYYY-MM-DD HH:MM". Si desea ejecutar TITO en modo nowcast (es decir, comenzando en el tiempo presente), defina `HindCastMode = False`.
+- **run_LR:** Para incluir QPF en la simulación (las opciones son GFS o WRF), defina `run_LR = True`.
+  - Si la simulación es para un **evento pasado** (`HindCastMode = True`), debe proporcionar:
+    - Fecha de inicio del QPF (`StartLRtime`)
+    - Fecha de fin del QPF (`EndLRtime`)
+    - Paso de tiempo del QPF (`LR_timestep`) en minutos, por ejemplo `30u`
+    - Ruta al archivo de QPF (`QPF_archive_path`)
+  - Si activa esta opción para **operaciones en tiempo real**, TITO usa un horario QPF predefinido. Puede revisar `orchestrator.py` para personalizarlo según su conveniencia.
+- **email_gpm:** Esta versión de TITO usa IMERG Early V07 como QPE. Necesitará crear una cuenta en el servidor de GPM para descargar archivos de precipitación. Visite la [página de registro de NASA GPM](https://registration.pps.eosdis.nasa.gov/registration/) y siga las instrucciones. **Importante:** Use su correo de registro como contraseña para que TITO pueda utilizarlo en las rutinas.
 
-**Before running TITO, verify your configuration paths:**
+**Antes de ejecutar TITO, verifique las rutas de configuración:**
 
-Open `Cuba_config.py` and ensure the following settings are correct:
+Abra `Cuba_config.py` y asegúrese de que las siguientes configuraciones sean correctas:
 
-- **Basic input directories:** Verify that the essential input folders are properly populated:
-  - `basic/` – Should contain DEMs for both 1 km and 25 m resolutions
-  - `pet/` – Should contain monthly PET (Potential Evapotranspiration) grids
-  - `parameters/` – Should contain distributed parameters for the KW and CREST models for the 1 km model, and `parameters/highResPara/` should contain parameters for the KW and CREST models for the 25 m model
+- **Directorios básicos de entrada:** Verifique que las carpetas esenciales de entrada estén correctamente pobladas:
+  - `basic/` - Debe contener DEM para resoluciones de 1 km y 25 m
+  - `pet/` - Debe contener rejillas mensuales de PET (evapotranspiración potencial)
+  - `parameters/` - Debe contener parámetros distribuidos para los modelos KW y CREST del modelo de 1 km, y `parameters/highResPara/` debe contener los parámetros para los modelos KW y CREST del modelo de 25 m
 
-- **High-resolution EF5 rerun settings:** Check that all paths for the 25 m resolution run are properly configured:
-  - `highres_template` – Path to the high-resolution control file template
-  - `highres_maskgrid` – Path to the mask grid file
-  - `highres_gauge_list` – Path to the gauge list file
-  - `highres_dataPath` – Output folder for 25 m results
-  - `statesHighResPath` – Folder for high-resolution model states
+- **Configuración de la reejecución EF5 de alta resolución:** Verifique que todas las rutas para la ejecución a resolución de 25 m estén correctamente configuradas:
+  - `highres_template` - Ruta a la plantilla del archivo de control de alta resolución
+  - `highres_maskgrid` - Ruta al archivo de la rejilla de máscara
+  - `highres_gauge_list` - Ruta a la lista de estaciones
+  - `highres_dataPath` - Carpeta de salida para los resultados a 25 m
+  - `statesHighResPath` - Carpeta para los estados del modelo de alta resolución
 
-- **Data Assimilation (DA) configuration:** Verify all DA folder paths exist and are correct:
-  - `DA_climatology_path` – Folder containing precomputed averaged reservoir data
-  - `DA_manual_path` – Folder for manually entered observed data
-  - `DA_consolidated_path` – Folder where consolidated data will be created
-  - `DA_simulation_path` – Folder where individual reservoir CSV files will be generated
-  - `DA_list_path` – Path to the list of reservoirs for data assimilation
+- **Configuración de asimilación de datos (DA):** Verifique que todas las rutas de carpetas DA existan y sean correctas:
+  - `DA_climatology_path` - Carpeta que contiene datos promedio precalculados de embalses
+  - `DA_manual_path` - Carpeta para datos observados ingresados manualmente
+  - `DA_consolidated_path` - Carpeta donde se crearán los datos consolidados
+  - `DA_simulation_path` - Carpeta donde se generarán archivos CSV individuales por embalse
+  - `DA_list_path` - Ruta a la lista de embalses para asimilación de datos
 
-**2. Run TITO:**
-  Run the following line in your terminal:
+**2. Ejecutar TITO:**
+  Ejecute la siguiente línea en la terminal:
   ```sh
   ./pipeline.sh
   ```
 
-  Logs from the pipeline can be viewed in `data/logs/`.
+  Los registros del pipeline pueden verse en `data/logs/`.
 
-**3. Schedule TITO to run automatically every hour (optional):**
-  
-  You can use the `manage_cron.sh` script to easily manage the TITO cron job:
-  
-  - **Install the cron job:**
+**3. Programar TITO para que se ejecute automáticamente cada hora (opcional):**
+
+  Puede usar el script `manage_cron.sh` para administrar fácilmente la tarea cron de TITO:
+
+  - **Instalar la tarea cron:**
     ```sh
     ./manage_cron.sh install
     ```
-  
-  - **Check cron job status:**
+
+  - **Comprobar el estado de la tarea cron:**
     ```sh
     ./manage_cron.sh status
     ```
-  
-  - **Remove the cron job:**
+
+  - **Eliminar la tarea cron:**
     ```sh
     ./manage_cron.sh remove
     ```
-  
-  TITO will run automatically every hour at hh:00 once installed.
+
+  Una vez instalada, TITO se ejecutará automáticamente cada hora en `hh:00`.
 
   <details>
-  <summary><b>Manual cron setup (alternative method)</b></summary>
+  <summary><b>Configuración manual de cron (método alternativo)</b></summary>
 
-  If you prefer to set up the cron job manually:
-  
-  1. Open the crontab editor:
+  Si prefiere configurar la tarea cron manualmente:
+
+  1. Abra el editor de crontab:
      ```sh
      crontab -e
      ```
-  
-  2. Add this line to the file and save:
+
+  2. Añada esta línea al archivo y guárdelo:
      ```
      0 * * * * /home/naman/labWork/TITOCubaTest/pipeline.sh
      ```
-  
-  3. Verify the cron job is installed:
+
+  3. Verifique que la tarea cron esté instalada:
      ```sh
      crontab -l
      ```
-  
-  TITO will now run automatically every hour at hh:00.
+
+  TITO ahora se ejecutará automáticamente cada hora en `hh:00`.
 
   </details>
 
-**Note on running the GFS downloader script:**
+**Nota sobre la ejecución del script de descarga de GFS:**
 
-It is advised to run the GFS download script in the background separately because GFS releases often go through delays. With every simulation, the script sometimes cannot find the latest GFS release, so it re-downloads the previous cycle, which is time-consuming. The GFS script under `tito_utils/qpf_utils/gfs_downloader.py` also supports background execution and will automatically check for new releases and keep the GFS files updated.
+Se recomienda ejecutar por separado y en segundo plano el script de descarga de GFS, ya que las publicaciones de GFS suelen sufrir retrasos. En cada simulación, el script a veces no encuentra la publicación más reciente de GFS, por lo que vuelve a descargar el ciclo anterior, lo cual consume tiempo. El script de GFS ubicado en `tito_utils/qpf_utils/gfs_downloader.py` también permite ejecución en segundo plano y verificará automáticamente nuevas publicaciones para mantener actualizados los archivos de GFS.
 
-To run this script in the background:
+Para ejecutar este script en segundo plano:
 
-1. Inside the terminal at the TITO root directory, activate the tito conda environment:
+1. Dentro de la terminal en el directorio raíz de TITO, active el entorno Conda de TITO:
    ```sh
    conda activate tito_env
    ```
 
-2. Run this script using the below command to keep the latest GFS files updated:
+2. Ejecute este script con el siguiente comando para mantener actualizados los archivos más recientes de GFS:
    ```sh
    nohup python tito_utils/qpf_utils/gfs_downloader.py --auto-out /home/<user>/<tito root>/precip/GFS > /home/<user>/<tito root>/data/logs/gfs_downloader.log 2>&1 &
    ```
 
-   Logs from the script can be viewed in `data/logs/gfs_downloader.log`.
+   Los registros del script pueden verse en `data/logs/gfs_downloader.log`.
 
-Details of how TITO operates can be found in this document (placeholder).
+Los detalles de cómo opera TITO pueden encontrarse en este documento (pendiente).
 
-## Contact
-Please contact Naman Mehta at naman-mehta@uiowa.edu or Vanessa Robledo at vanessa-robledodelgado@uiowa.edu or the [AHWA Laboratory](https://ahwa.lab.uiowa.edu/) Development team at engr-ahwa-lab@uiowa.edu.
+## Contacto
+Puede comunicarse con Naman Mehta en naman-mehta@uiowa.edu, con Vanessa Robledo en vanessa-robledodelgado@uiowa.edu, o con el equipo de desarrollo del [Laboratorio AHWA](https://ahwa.lab.uiowa.edu/) en engr-ahwa-lab@uiowa.edu.
 
-## Cite this package
+## Cómo citar este paquete
 Robledo Delgado, V., & Vergara, H. (2025). Threading Inputs to Outputs (TITO) (v2.0.0). Zenodo. https://doi.org/10.5281/zenodo.17246491
