@@ -171,8 +171,8 @@ def main(args):
     systemStartTime = currentTime - timedelta(hours=4.5) 
     # Save states for the current run with the current time step's timestamp
     systemStateEndTime = currentTime - timedelta(hours=4) #change to 4
-    # Only check for states as far as we have QPs (6 hours)
-    failTime = currentTime - timedelta(hours=6)
+    # Only check for states as far as we have QPs (7 days)
+    failTime = currentTime - timedelta(days=7)
     # Warmup end time: if warmup_days is configured and no states are found,
     # the simulation will start warmup_days earlier and warm up until systemStartTime.
     # The actual adjustment of systemStartTime happens in prepare_ef5 when states are not found.
@@ -200,7 +200,7 @@ def main(args):
     ###-------------------------- EARLY STATE CHECK --------------------------------
     # Check for states early so we know if warmup is needed BEFORE downloading precip and DA
     print("***_________Checking for available model states_________***")
-    foundAllStates, _ = find_available_states(statesPath, modelStates, systemStartTime, failTime)
+    foundAllStates, realSystemStartTime = find_available_states(statesPath, modelStates, systemStartTime, failTime)
     
     if not foundAllStates and warmup_days > 0:
         warmupStartTime = systemStartTime - timedelta(days=warmup_days)
@@ -210,6 +210,9 @@ def main(args):
         print(f"    Warmup end:     {systemWarmEndTime.strftime('%Y-%m-%d %H:%M')}")
         # Push systemStartTime back for precip download, DA, and EF5
         systemStartTime = warmupStartTime
+    elif foundAllStates and realSystemStartTime < systemStartTime:
+        print(f"    States found at {realSystemStartTime.strftime('%Y-%m-%d %H:%M')}. Adjusting system start time to match.")
+        systemStartTime = realSystemStartTime
     elif foundAllStates:
         print(f"    States found. No warmup needed.")
     else:
@@ -548,7 +551,68 @@ def main(args):
                 print(f"    Warning: Could not process file {file}: {e}")
         print(f"    Removed {removed_count} duplicated IMERG file(s) newer than {imerg_latency_limit.strftime('%Y-%m-%d %H:%M')} UTC")
     except Exception as e:
-        print(f"    Warning: Error during final cleanup: {e}")
+        print(f"    Warning: Error during duplicated IMERG cleanup: {e}")
+
+    # Remove state files older than 10 days
+    newline(2)
+    print("***_________Cleaning up old state files_________***")
+    try:
+        states_time_limit = currentTime - timedelta(days=10)
+        states_removed = 0
+        for s_folder in set(filter(None, [statesPath, statesHighResPath])):
+            if os.path.exists(s_folder):
+                for f in listdir(s_folder):
+                    if f.endswith('.tif'):
+                        file_path = os.path.join(s_folder, f)
+                        try:
+                            # Extract date from filename, e.g. crest_SM_20260424_1000.tif
+                            match = re.search(r'_(\d{8}_\d{4})\.tif$', f)
+                            if match:
+                                file_timestamp = dt.strptime(match.group(1), '%Y%m%d_%H%M').replace(tzinfo=timezone.utc)
+                            else:
+                                # Fallback to file modification time
+                                file_timestamp = dt.fromtimestamp(os.path.getmtime(file_path), tz=timezone.utc)
+                                
+                            if file_timestamp < states_time_limit:
+                                remove(file_path)
+                                states_removed += 1
+                        except Exception as e:
+                            print(f"    Warning: Could not process state file {f}: {e}")
+        print(f"    Removed {states_removed} old state file(s) older than {states_time_limit.strftime('%Y-%m-%d %H:%M')} UTC")
+    except Exception as e:
+        print(f"    Warning: Error cleaning old state files: {e}")
+    # Remove output subfolders older than a week (7 days)
+    newline(2)
+    print("***_________Cleaning up old output folders_________***")
+    try:
+        output_folders_to_check = [
+            dataPath, tmpOutput,
+            highres_dataPath, highres_tmpOutput,
+            nowCastOnly_dataPath, nowCastOnly_tmpOutput,
+            nowCastOnly_highres_dataPath, nowCastOnly_highres_tmpOutput
+        ]
+        
+        output_time_limit = currentTime - timedelta(days=7)
+        folders_removed = 0
+        
+        for base_folder in set(filter(None, output_folders_to_check)):
+            if os.path.exists(base_folder):
+                for subfolder in listdir(base_folder):
+                    subfolder_path = os.path.join(base_folder, subfolder)
+                    if os.path.isdir(subfolder_path):
+                        # Try to parse the subfolder name as a timestamp YYYYMMDDHHMM
+                        if re.match(r'^\d{12}$', subfolder):
+                            try:
+                                folder_timestamp = dt.strptime(subfolder, '%Y%m%d%H%M').replace(tzinfo=timezone.utc)
+                                if folder_timestamp < output_time_limit:
+                                    rmtree(subfolder_path)
+                                    folders_removed += 1
+                            except Exception as e:
+                                print(f"    Warning: Could not process subfolder {subfolder}: {e}")
+        print(f"    Removed {folders_removed} old output subfolder(s) older than {output_time_limit.strftime('%Y-%m-%d %H:%M')} UTC")
+    except Exception as e:
+        print(f"    Warning: Error cleaning old output folders: {e}")
+
     print("***_________Final cleanup complete_________***")
              
 """

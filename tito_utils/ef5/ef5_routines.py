@@ -60,7 +60,7 @@ def find_available_states(statesPath, modelStates, systemStartTime, failTime):
     print("    Looking for states.")
 
     # Iterate over all necessary states and check if they're available for the current run
-    # Only go back up to 6 hours, in 30min decrements
+    # Check backwards in 30min decrements up to failTime (configured to 7 days)
     while not foundAllStates and realSystemStartTime > failTime:
         foundAllStates = True
         for state in modelStates:
