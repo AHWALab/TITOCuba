@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script to manage TITO cron job
-# Usage: ./manage_cron.sh [install|remove|status] [optional: path_to_geoserver_refresh_script]
+# Usage: ./manage_cron.sh [install|remove|status] [optional: path_to_refresh_script]
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,7 +21,7 @@ install_cron() {
         # Make path absolute
         refresh_script=$(readlink -f "$refresh_script")
         command="$SCRIPT_PATH && $refresh_script"
-        echo "ℹ Including GeoServer refresh script: $refresh_script"
+        echo "ℹ Including post-pipeline refresh script: $refresh_script"
     fi
     
     local cron_job="$CRON_SCHEDULE $command"
@@ -103,18 +103,18 @@ case "$1" in
     *)
         echo "TITO Cron Job Manager"
         echo ""
-        echo "Usage: $0 [install|remove|status] [optional: /path/to/geoserver/refresh_layers.sh]"
+        echo "Usage: $0 [install|remove|status] [optional: /path/to/refresh_script]"
         echo ""
         echo "Commands:"
         echo "  install  - Install cron job to run TITO every hour."
-        echo "             You can optionally provide the path to the GeoServer refresh script"
-        echo "             to automatically update GeoServer after the pipeline finishes."
+        echo "             You can optionally provide the path to a post-pipeline refresh script"
+        echo "             (e.g. TiTiler refresh) to run after the pipeline finishes."
         echo "  remove   - Remove the TITO cron job"
         echo "  status   - Check if cron job is installed"
         echo ""
         echo "Examples:"
         echo "  $0 install"
-        echo "  $0 install /home/user/geoserver_install_pack/scripts/refresh_layers.sh"
+        echo "  $0 install titiler_api/refresh_titiler.sh"
         exit 1
         ;;
 esac

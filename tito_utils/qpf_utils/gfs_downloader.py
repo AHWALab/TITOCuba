@@ -2,6 +2,21 @@
 """
 Herbie-based GFS precipitation downloader and GeoTIFF converter.
 
+┌─ Deployment ─────────────────────────────────────────────────────────────┐
+│ Crontab (@reboot):                                                        │
+│   @reboot sleep 30 && cd .../qpf_utils && while true; do                  │
+│     python gfs_downloader.py --auto-out .../precip/gfs >> .../logs/...;   │
+│     sleep 10;                                                             │
+│   done                                                                    │
+│                                                                           │
+│ Auto-restart:     while-true loop in cron restarts on any crash.          │
+│ DNS fallback:     Uses Google DNS (8.8.8.8) if university DNS fails.     │
+│ Retry strategy:   Exponential backoff (5s → 10s → 20s → 40s → 80s)       │
+│                   for DNS/connection errors, then poll every 1h.          │
+│ Conda env:        tito_env2                                               │
+│ Logs:             ~/TITOCubaMain/TITOCuba/data/logs/gfs_downloader.log    │
+└──────────────────────────────────────────────────────────────────────────┘
+
 Quick usage guide:
 - Activate the conda environment:
   `conda activate tito_env`
@@ -33,7 +48,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
+import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from typing import Iterable, List, Optional, Tuple, Union
 
@@ -228,6 +246,126 @@ def _wrap_longitudes_to_180(da: xr.DataArray) -> xr.DataArray:
 
 
 
+# ---------------------------------------------------------------------------
+# DNS fallback: when university DNS fails for NOAA, resolve via public DNS
+# ---------------------------------------------------------------------------
+_NOAA_HOSTS = ('nomads.ncep.noaa.gov', 'nomads.ncep.noaa.gov')
+_PUBLIC_DNS = ('8.8.8.8', '1.1.1.1')
+_noaa_ip_cache: Optional[str] = None
+_original_getaddrinfo = socket.getaddrinfo
+
+
+def _resolve_noaa_via_public_dns() -> Optional[str]:
+    """Resolve nomads.ncep.noaa.gov via public DNS (dig @8.8.8.8)."""
+    for dns_server in _PUBLIC_DNS:
+        try:
+            result = subprocess.run(
+                ['dig', f'@{dns_server}', '+short', 'nomads.ncep.noaa.gov'],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if line and not line.startswith(';'):
+                    # dig +short returns IP or CNAME chain; take first IP-like result
+                    parts = line.split()
+                    for part in parts:
+                        part = part.rstrip('.')
+                        try:
+                            socket.inet_pton(socket.AF_INET, part)
+                            sys.stderr.write(f"[dns-fallback] Resolved nomads.ncep.noaa.gov → {part} via {dns_server}\n")
+                            return part
+                        except OSError:
+                            continue
+        except Exception:
+            continue
+    return None
+
+
+def _patched_getaddrinfo(host, *args, **kwargs):
+    """Monkey-patched getaddrinfo that redirects NOAA hosts to cached public IP."""
+    if host and 'ncep.noaa.gov' in str(host) and _noaa_ip_cache:
+        return _original_getaddrinfo(_noaa_ip_cache, *args, **kwargs)
+    return _original_getaddrinfo(host, *args, **kwargs)
+
+
+def _enable_dns_fallback():
+    """Enable DNS fallback by patching socket.getaddrinfo."""
+    global _noaa_ip_cache
+    if _noaa_ip_cache is None:
+        _noaa_ip_cache = _resolve_noaa_via_public_dns()
+    if _noaa_ip_cache:
+        socket.getaddrinfo = _patched_getaddrinfo
+        return True
+    return False
+
+
+def _disable_dns_fallback():
+    """Restore original socket.getaddrinfo."""
+    socket.getaddrinfo = _original_getaddrinfo
+
+
+def _retry_herbie_constructor(init_time: datetime, fxx: int, max_retries: int = 4, base_delay: float = 5.0):
+    """Retry Herbie constructor with exponential backoff on DNS/connection errors.
+    Activates public DNS fallback if system DNS fails for NOAA hosts."""
+    last_err = None
+    dns_fallback_enabled = False
+    for attempt in range(max_retries + 1):
+        try:
+            return Herbie(init_time, model="gfs", product="pgrb2.0p25", fxx=fxx)
+        except Exception as e:
+            last_err = e
+            err_msg = str(e).lower()
+            is_dns = any(kw in err_msg for kw in (
+                'name resolution', 'servfail', 'temporary failure',
+                'name or service not known', 'nxdomain', 'connection',
+                'timeout', 'timed out'
+            ))
+            if not is_dns or attempt >= max_retries:
+                if dns_fallback_enabled:
+                    _disable_dns_fallback()
+                raise
+            # Try DNS fallback on first DNS failure
+            if not dns_fallback_enabled:
+                dns_fallback_enabled = _enable_dns_fallback()
+                if dns_fallback_enabled:
+                    sys.stderr.write(f"[retry] DNS fallback enabled, retrying immediately...\n")
+                    continue  # retry immediately with patched DNS
+            delay = base_delay * (2 ** attempt)
+            sys.stderr.write(
+                f"[retry] DNS/connection error on Herbie init attempt {attempt+1}/{max_retries+1}, "
+                f"retrying in {delay:.0f}s: {e}\n"
+            )
+            time.sleep(delay)
+    if dns_fallback_enabled:
+        _disable_dns_fallback()
+    raise last_err  # type: ignore
+
+
+def _retry_fetch(herbie_obj, query: str, max_retries: int = 4, base_delay: float = 5.0):
+    """Retry Herbie xarray fetch with exponential backoff on DNS/connection errors."""
+    last_err = None
+    for attempt in range(max_retries + 1):
+        try:
+            return herbie_obj.xarray(query)
+        except Exception as e:
+            last_err = e
+            err_msg = str(e).lower()
+            is_dns = any(kw in err_msg for kw in (
+                'name resolution', 'servfail', 'temporary failure',
+                'name or service not known', 'nxdomain', 'connection',
+                'timeout', 'timed out'
+            ))
+            if not is_dns or attempt >= max_retries:
+                raise
+            delay = base_delay * (2 ** attempt)
+            sys.stderr.write(
+                f"[retry] DNS/connection error on attempt {attempt+1}/{max_retries+1}, "
+                f"retrying in {delay:.0f}s: {e}\n"
+            )
+            time.sleep(delay)
+    raise last_err  # type: ignore
+
+
 def _safe_to_raster(da: xr.DataArray, out_path: str) -> None:
     """Write DataArray to GeoTIFF with sensible defaults for EF5 compatibility."""
     # Ensure directory exists
@@ -348,14 +486,14 @@ def download_GFS(
         for fxx in fxx_list:
             valid_time = init_time + timedelta(hours=fxx)
 
-            # retrieve PRATE via Herbie for this forecast hour
-            H = Herbie(init_time, model="gfs", product="pgrb2.0p25", fxx=fxx)
+            # retrieve PRATE via Herbie for this forecast hour (with DNS retry)
+            H = _retry_herbie_constructor(init_time, fxx)
 
             ds: Optional[Union[xr.Dataset, List[xr.Dataset]]] = None
             last_err: Optional[Exception] = None
             for query in (":PRATE:surface", ":PRATE:", "PRATE:surface", "PRATE"):
                 try:
-                    ds = H.xarray(query)
+                    ds = _retry_fetch(H, query)
                     break
                 except Exception as e:  # pragma: no cover - remote data nuances
                     last_err = e
@@ -685,7 +823,6 @@ def _auto_mode(
         if one_shot:
             return total_written_overall
         try:
-            import time
             time.sleep(poll)
         except KeyboardInterrupt:
             sys.stderr.write("Auto mode stopped by user.\n")
