@@ -102,6 +102,7 @@ convert_one() {
             -co COMPRESS=DEFLATE \
             -co LEVEL=6 \
             -co NUM_THREADS=1 \
+            -co OVERVIEW_RESAMPLING=NEAREST \
             -q \
             "$tif_file" "$cog_file" 2>/dev/null; then
 

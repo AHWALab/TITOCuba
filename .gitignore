@@ -62,6 +62,10 @@
 !titiler_api/
 !titiler_api/**
 
+!titiler_viewer/
+!titiler_viewer/**
+titiler_viewer/node_modules/
+
 !DA_Climatology/
 !DA_Climatology/.gitignore
 !DA_Consolidated/
@@ -114,6 +118,7 @@ Thumbs.db
 # Build artifacts
 build/
 dist/
+node_modules/
 
 # Archives
 *.zip

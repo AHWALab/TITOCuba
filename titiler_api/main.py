@@ -34,6 +34,14 @@ from PIL import Image
 
 from config import PRODUCTS, PRODUCT_BY_ID
 
+# ── PROJ Database Fix ───────────────────────────────────────────────────────
+# The base conda environment has an incompatible proj.db; use the env's copy.
+import sys
+_PROJ_ENV_DIR = os.path.join(os.path.dirname(os.path.dirname(sys.executable)), 'share', 'proj')
+if os.path.isdir(_PROJ_ENV_DIR):
+    os.environ['PROJ_DATA'] = _PROJ_ENV_DIR
+    os.environ['PROJ_LIB'] = _PROJ_ENV_DIR
+
 # ── GDAL Performance Tuning ─────────────────────────────────────────────────
 # Set BEFORE any rasterio operations. These dramatically improve performance
 # for non-COG GeoTIFFs and add caching for repeated reads.
@@ -696,6 +704,50 @@ async def refresh_index():
     build_file_index(force=True)
     total = sum(len(v) for v in _file_index.values())
     return {"status": "ok", "total_granules": total}
+
+
+# ── Discharge CSV Endpoint ──────────────────────────────────────────────────
+# Serves timeseries CSV files from DATA_ROOT/discharge/{timestep}/
+# Used by the AHWA TiTiler Viewer web app for gauge popup charts.
+
+from fastapi.responses import PlainTextResponse
+
+try:
+    from config import DATA_ROOT as CONFIG_DATA_ROOT
+except ImportError:
+    CONFIG_DATA_ROOT = "/home/nammehta/TITOCubaMainTest/titilerTest"
+
+DISCHARGE_ROOT = os.path.join(CONFIG_DATA_ROOT, "discharge")
+
+
+@app.get("/discharge/{timestep}")
+async def list_discharge_files(timestep: str):
+    """List available CSV files for a timestep (e.g., 202606091400)."""
+    ts_dir = os.path.join(DISCHARGE_ROOT, timestep)
+    if not os.path.isdir(ts_dir):
+        return []
+    try:
+        files = sorted([
+            f for f in os.listdir(ts_dir)
+            if f.endswith('.csv')
+        ])
+        return files
+    except Exception:
+        return []
+
+
+@app.get("/discharge/{timestep}/{filename}")
+async def get_discharge_csv(timestep: str, filename: str):
+    """Serve a specific discharge CSV file for a timestep."""
+    filepath = os.path.join(DISCHARGE_ROOT, timestep, filename)
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="CSV file not found")
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
+        return PlainTextResponse(content=content, media_type="text/csv")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/admin/cron")

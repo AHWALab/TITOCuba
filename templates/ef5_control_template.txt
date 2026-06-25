@@ -222,10 +222,14 @@ TYPE=TIF
 [gauge EMB3500006] lat=20.1291666666666 lon=-75.358278704048 outputts=false WANTDA=true obs=DA_Simulation/EMB3500006_Vertimiento_Serie.csv
 
 
+#[Gauge La_Habana]
+#LON=-82.411563
+#LAT=23.120617
+#OUTPUTTS=TRUE
 
 [Gauge La_Habana]
-LON=-82.343773
-LAT=23.135439
+LON=-82.33101316
+LAT=23.11085508
 OUTPUTTS=TRUE
 
 [Gauge Santiago_de_Cuba]
@@ -259,8 +263,8 @@ LAT=20.954167
 OUTPUTTS=TRUE
 
 [Gauge Cienfuegos]
-LON=-80.462500
-LAT=22.154167
+LON=-80.493089
+LAT=22.184830
 OUTPUTTS=TRUE
 
 [Gauge Pinar_del_Ro]
