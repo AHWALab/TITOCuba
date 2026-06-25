@@ -30,15 +30,15 @@ echo "════════════════════════�
 
 # ── Path Configuration (hardcoded) ───────────────────────────────────────
 # Source: TITO pipeline raw output directories
-# SRC_CREST="/var/ef5/TITOCuba/outputs/tmp_output_crest"
-# SRC_DEPTH="/var/ef5/TITOCuba/outputs_25m"
+SRC_CREST="/var/ef5/TITOCuba/outputs/tmp_output_crest"
+SRC_DEPTH="/var/ef5/TITOCuba/outputs_25m"
 
-SRC_CREST="/home/nammehta/TITOCubaMainTest/TITOCuba/outputs/tmp_output_crest"
-SRC_DEPTH="/home/nammehta/TITOCubaMainTest/TITOCuba/outputs_25m/tmp_output_crest_25m"
+# SRC_CREST="/home/nammehta/TITOCubaMainTest/TITOCuba/outputs/tmp_output_crest"
+# SRC_DEPTH="/home/nammehta/TITOCubaMainTest/TITOCuba/outputs_25m/tmp_output_crest_25m"
 
 # Target: TiTiler serves directly from these GeoServer data directories
-# DATA_ROOT="/var/ef5/geoServer"
-DATA_ROOT="/home/nammehta/TITOCubaMainTest/titilerTest"
+DATA_ROOT="/var/ef5/geoServer"
+# DATA_ROOT="/home/nammehta/TITOCubaMainTest/titilerTest"
 
 # ── Product Mapping ──────────────────────────────────────────────────────
 # param → target subdirectory (just the param name, flat under DATA_ROOT)
