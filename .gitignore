@@ -16,7 +16,11 @@
 !setup_tito.sh
 !setup_ef5_path.sh
 !README.md
+!README.en.md
 !tito_env.yml
+!titiler_api_endpoints.txt
+!SS*.png
+!TITO Simulation and Ouptuts info.pptx
 
 ###############################################
 # Allow only these top-level directories      #

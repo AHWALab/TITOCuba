@@ -64,6 +64,25 @@ Este repositorio está diseñado para ejecutar EF5 de forma operativa sobre Cuba
 - **`Nowcast/`** - Contiene rutinas de aprendizaje automático utilizadas para generar pronósticos QPF.
 - **`tito_utils/`** - Colección de módulos utilitarios y scripts auxiliares usados internamente por TITO.
 
+### Salidas de TITO
+
+Cada simulación produce las siguientes salidas ráster (GeoTIFF):
+
+- **Caudal unitario máximo** (m³/s/km²)
+- **Caudal máximo** (m³/s)
+- **Humedad máxima del suelo** (0–100 %)
+- **QPE: Precipitación estimada acumulada** (vía IMERG + Nowcasting)
+- **QPF: Precipitación pronosticada acumulada** (vía GFS)
+- **Profundidad máxima: Inundación** (m)
+
+Adicionalmente, se genera un archivo CSV de series de tiempo para cada simulación en cada punto de medición definido en `titiler_api/gaugePoints.txt`. Ejemplo de nombre de archivo:
+
+```
+ts.la_habana.crest.20260622.160000.csv
+```
+
+> **Nota:** Para información adicional sobre las líneas de tiempo y salidas de la simulación, consulte el documento **TITO Simulation and Outputs info.pptx**.
+
 ## ¿Cómo ejecutar TITO?
 **1. Editar el archivo de configuración:**
 Después de completar la instalación del entorno requerido y de poblar las carpetas correspondientes de EF5, abra el archivo `Cuba_config.py`. Hay algunas líneas que el usuario debe modificar en este archivo para ejecutar TITO correctamente:
@@ -172,7 +191,90 @@ Para ejecutar este script en segundo plano:
 
    Los registros del script pueden verse en `data/logs/gfs_downloader.log`.
 
-Los detalles de cómo opera TITO pueden encontrarse en este documento (pendiente).
+## TITO + API TiTiler y aplicación web de prueba
+
+TITO está equipado con un backend TiTiler para servir las salidas ráster de EF5, de modo que puedan superponerse en una aplicación web (por ejemplo, Tethys o el visor de prueba incluido). La API proporciona endpoints de teselas XYZ y WMS para los seis productos, además de un endpoint de series de tiempo/descarga para datos de estaciones.
+
+**Una lista completa de todos los endpoints de la API está disponible en `titiler_api_endpoints.txt`.**
+
+### Configuración de la API TiTiler
+
+**1. Ejecutar el script de instalación y prueba**
+
+```sh
+cd titiler_api
+bash setup_and_test.sh
+```
+
+Este script crea el entorno Conda `titiler-ahwa`, instala todas las dependencias de Python (FastAPI, rasterio, Pillow, numpy, uvicorn) y ejecuta una verificación rápida de que todos los directorios de productos existen y los archivos GeoTIFF pueden escanearse correctamente.
+
+**2. Iniciar el servidor TiTiler**
+
+```sh
+./start.sh <número_de_puerto>
+```
+
+Ejemplo:
+
+```sh
+./start.sh 8080
+```
+
+Esto inicia TiTiler en el puerto 8080. Si no se especifica un puerto, se usará el puerto 8000 por defecto.
+
+> **Nota:** El número de puerto debe coincidir con el puerto que espera su aplicación web (por ejemplo, Tethys).
+
+**3. Actualizar TiTiler (después de cada simulación)**
+
+El script `refresh_titiler.sh` renombra todas las salidas de EF5, las convierte a GeoTIFF optimizado para la nube (COG) y las coloca en los directorios de datos de TiTiler. Configure las rutas de origen y destino dentro de `refresh_titiler.sh`:
+
+```sh
+# Origen: directorios de salida del pipeline TITO
+SRC_CREST="/var/ef5/TITOCuba/outputs/tmp_output_crest"
+SRC_DEPTH="/var/ef5/TITOCuba/outputs_25m"
+
+# Destino: TiTiler sirve directamente desde estos directorios de datos
+DATA_ROOT="/var/ef5/geoServer"
+```
+
+**Emparejar con la tarea cron de TITO** para que se ejecute después de cada simulación:
+
+```sh
+./manage_cron.sh install titiler_api/refresh_titiler.sh
+```
+
+### Aplicación web de prueba (titiler_viewer) *(Opcional)*
+
+Se incluye una aplicación web ligera basada en Svelte para probar los endpoints de TiTiler y visualizar las salidas.
+
+**Requisitos previos:** Node.js 18+ y npm deben estar instalados.
+
+**1. Configurar el visor**
+
+```sh
+cd titiler_viewer
+bash setup.sh
+```
+
+Este script verifica Node.js/npm, instala todos los paquetes necesarios (Svelte, Vite, Leaflet) y verifica la estructura del proyecto.
+
+**2. Iniciar TiTiler en el puerto 2000** (el visor espera el puerto 2000 por defecto)
+
+```sh
+cd titiler_api
+./start.sh 2000
+```
+
+**3. Iniciar el visor**
+
+```sh
+cd titiler_viewer
+npm run dev
+```
+
+El visor estará disponible en `http://localhost:3000`.
+
+> **Nota:** Para información adicional sobre las líneas de tiempo y salidas de la simulación, consulte el documento **TITO Simulation and Outputs info.pptx**.
 
 ## Contacto
 Puede comunicarse con Naman Mehta en naman-mehta@uiowa.edu, con Vanessa Robledo en vanessa-robledodelgado@uiowa.edu, o con el equipo de desarrollo del [Laboratorio AHWA](https://ahwa.lab.uiowa.edu/) en engr-ahwa-lab@uiowa.edu.

@@ -1,0 +1,128 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# TiTiler API — Complete Endpoint Reference for All 6 Products
+# Base URL: http://localhost:2000 
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Product Info ─────────────────────────────────────────────────────────────
+
+http://localhost:2000/products
+http://localhost:2000/products/cuba_gfs_maxUnitStreamFlow
+http://localhost:2000/products/cuba_gfs_maxStreamFlow
+http://localhost:2000/products/cuba_gfs_precipAccumImerg
+http://localhost:2000/products/cuba_gfs_precipAccum
+http://localhost:2000/products/cuba_gfs_maxSoilSat
+http://localhost:2000/products/cuba_gfs_highResMaxInu
+http://localhost:2000/health
+
+
+# ── Legend PNGs ──────────────────────────────────────────────────────────────
+
+http://localhost:2000/legend/cuba_gfs_maxUnitStreamFlow.png
+http://localhost:2000/legend/cuba_gfs_maxStreamFlow.png
+http://localhost:2000/legend/cuba_gfs_precipAccumImerg.png
+http://localhost:2000/legend/cuba_gfs_precipAccum.png
+http://localhost:2000/legend/cuba_gfs_maxSoilSat.png
+http://localhost:2000/legend/cuba_gfs_highResMaxInu.png
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WMS GetMap — All 6 Products
+# BBOX = -85,19,-74,24 (Cuba), CRS = EPSG:4326, 800x600
+# TIME=2026-06-08T13:00:00 used as example — replace with any ISO8601 datetime
+# Omit &TIME entirely to get the latest available timestep
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ── 1. Max Unit Streamflow (m³/s/km²) ────────────────────────────────────────
+
+http://localhost:2000/wms?product_id=cuba_gfs_maxUnitStreamFlow&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_maxUnitStreamFlow&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true&TIME=2026-06-08T13:00:00
+http://localhost:2000/wms?product_id=cuba_gfs_maxUnitStreamFlow&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_maxUnitStreamFlow&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true
+
+
+# ── 2. Max Streamflow (m³/s) ─────────────────────────────────────────────────
+
+http://localhost:2000/wms?product_id=cuba_gfs_maxStreamFlow&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_maxStreamFlow&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true&TIME=2026-06-08T13:00:00
+http://localhost:2000/wms?product_id=cuba_gfs_maxStreamFlow&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_maxStreamFlow&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true
+
+
+# ── 3. QPE Accum — IMERG (mm) ────────────────────────────────────────────────
+
+http://localhost:2000/wms?product_id=cuba_gfs_precipAccumImerg&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_precipAccumImerg&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true&TIME=2026-06-08T13:00:00
+http://localhost:2000/wms?product_id=cuba_gfs_precipAccumImerg&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_precipAccumImerg&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true
+
+
+# ── 4. QPF Accum — GFS (mm) ──────────────────────────────────────────────────
+
+http://localhost:2000/wms?product_id=cuba_gfs_precipAccum&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_precipAccum&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true&TIME=2026-06-08T13:00:00
+http://localhost:2000/wms?product_id=cuba_gfs_precipAccum&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_precipAccum&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true
+
+
+# ── 5. Max Soil Saturation (%) ───────────────────────────────────────────────
+
+http://localhost:2000/wms?product_id=cuba_gfs_maxSoilSat&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_maxSoilSat&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true&TIME=2026-06-08T13:00:00
+http://localhost:2000/wms?product_id=cuba_gfs_maxSoilSat&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_maxSoilSat&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true
+
+
+# ── 6. Max Inundation Depth (m) ──────────────────────────────────────────────
+
+http://localhost:2000/wms?product_id=cuba_gfs_highResMaxInu&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_highResMaxInu&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true&TIME=2026-06-08T13:00:00
+http://localhost:2000/wms?product_id=cuba_gfs_highResMaxInu&REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&LAYERS=cuba_gfs_highResMaxInu&STYLES=&CRS=EPSG:4326&BBOX=-85,19,-74,24&WIDTH=800&HEIGHT=600&FORMAT=image/png&TRANSPARENT=true
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# XYZ Tiles — All 6 Products
+# Pattern: /tiles/{product_id}/{z}/{x}/{y}.png?time={ISO8601}
+# ═══════════════════════════════════════════════════════════════════════════════
+
+http://localhost:2000/tiles/cuba_gfs_maxUnitStreamFlow/{z}/{x}/{y}.png?time=2026-06-08T13:00:00
+http://localhost:2000/tiles/cuba_gfs_maxStreamFlow/{z}/{x}/{y}.png?time=2026-06-08T13:00:00
+http://localhost:2000/tiles/cuba_gfs_precipAccumImerg/{z}/{x}/{y}.png?time=2026-06-08T13:00:00
+http://localhost:2000/tiles/cuba_gfs_precipAccum/{z}/{x}/{y}.png?time=2026-06-08T13:00:00
+http://localhost:2000/tiles/cuba_gfs_maxSoilSat/{z}/{x}/{y}.png?time=2026-06-08T13:00:00
+http://localhost:2000/tiles/cuba_gfs_highResMaxInu/{z}/{x}/{y}.png?time=2026-06-08T13:00:00
+
+# Omit ?time= to get latest:
+http://localhost:2000/tiles/cuba_gfs_maxStreamFlow/{z}/{x}/{y}.png
+
+# Concrete example (zoom 8, x=72, y=104):
+http://localhost:2000/tiles/cuba_gfs_maxStreamFlow/8/72/104.png?time=2026-06-08T13:00:00
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WMS GetCapabilities
+# ═══════════════════════════════════════════════════════════════════════════════
+
+http://localhost:2000/wms/capabilities
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Timeseries / Discharge CSV
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# List available CSV files for a timestep (format: YYYYMMDDHHmm)
+http://localhost:2000/discharge/202606091400
+
+# Get a specific gauge CSV
+http://localhost:2000/discharge/202606091400/gauge_1234.csv
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Admin
+# ═══════════════════════════════════════════════════════════════════════════════
+
+http://localhost:2000/admin/refresh          # POST — force rebuild file index
+http://localhost:2000/admin/cron             # GET  — view crontab
+http://localhost:2000/admin/check-path?path=/some/path  # GET — check path
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Quick Reference — Product IDs to swap in any URL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# cuba_gfs_maxUnitStreamFlow     →  Max Unit Streamflow (m³/s/km²)   short: maxunitq
+# cuba_gfs_maxStreamFlow         →  Max Streamflow (m³/s)            short: maxq
+# cuba_gfs_precipAccumImerg      →  QPE Accum IMERG (mm)             short: qpeaccum
+# cuba_gfs_precipAccum           →  QPF Accum GFS (mm)               short: qpfaccum
+# cuba_gfs_maxSoilSat            →  Max Soil Saturation (%)          short: maxsm
+# cuba_gfs_highResMaxInu         →  Max Inundation Depth (m)         short: maxdepth

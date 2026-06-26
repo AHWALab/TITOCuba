@@ -64,6 +64,25 @@ This repository is designed to run EF5 operationally over Cuba.
 - **`Nowcast/`** - Contains machine learning routines used to generate QPF forecasts.
 - **`tito_utils/`** - Collection of utility modules and helper scripts used internally by TITO.
 
+### TITO Outputs
+
+Each simulation produces the following raster outputs (GeoTIFF):
+
+- **Max Unit Streamflow** (m³/s/km²)
+- **Max Streamflow** (m³/s)
+- **Max Soil Moisture** (0–100 %)
+- **QPE: Quantitative Precipitation Estimation** accumulated (via IMERG + Nowcasting)
+- **QPF: Quantitative Precipitation Forecast** accumulated (via GFS)
+- **Max Depth: Inundation** (m)
+
+Additionally, a timeseries CSV is produced for each simulation at each gauge point defined in `titiler_api/gaugePoints.txt`. Example filename:
+
+```
+ts.la_habana.crest.20260622.160000.csv
+```
+
+> **Note:** For additional information on simulation timelines and outputs, please refer to the **TITO Simulation and Outputs info.pptx** document.
+
 ## How to run?
 **1. Edit the config file:**
 After completing the installation of the required environment and populating the corresponding EF5 folders, open `Cuba_config.py` file. There are few lines users need to change in this config file to run TITO successfully:
@@ -172,7 +191,90 @@ To run this script in the background:
 
    Logs from the script can be viewed in `data/logs/gfs_downloader.log`.
 
-Details of how TITO operates can be found in this document (placeholder).
+## TITO + TiTiler API & Test Web App
+
+TITO is equipped with a TiTiler backend to serve the EF5 raster outputs so they can be overlaid on a web app (e.g., Tethys or the included test viewer). The API provides both XYZ tile and WMS endpoints for all six products, plus a discharge/timeseries CSV endpoint for gauge data.
+
+**A full list of all API endpoints is available in `titiler_api_endpoints.txt`.**
+
+### Setting up the TiTiler API
+
+**1. Run the setup & test script**
+
+```sh
+cd titiler_api
+bash setup_and_test.sh
+```
+
+This script creates the `titiler-ahwa` Conda environment, installs all Python dependencies (FastAPI, rasterio, Pillow, numpy, uvicorn), and runs a quick verification that all product directories exist and GeoTIFF files can be scanned correctly.
+
+**2. Start the TiTiler server**
+
+```sh
+./start.sh <port_number>
+```
+
+Example:
+
+```sh
+./start.sh 8080
+```
+
+This starts TiTiler on port 8080. If no port is specified, it defaults to port 8000.
+
+> **Note:** The port number must match the port that your web app (e.g. Tethys) expects.
+
+**3. Refreshing TiTiler (post-simulation)**
+
+The `refresh_titiler.sh` script renames all EF5 outputs, converts them to Cloud-Optimized GeoTIFF (COG), and places them in the TiTiler data directories. Configure the source and target paths inside `refresh_titiler.sh`:
+
+```sh
+# Source: TITO pipeline raw output directories
+SRC_CREST="/var/ef5/TITOCuba/outputs/tmp_output_crest"
+SRC_DEPTH="/var/ef5/TITOCuba/outputs_25m"
+
+# Target: TiTiler serves directly from these data directories
+DATA_ROOT="/var/ef5/geoServer"
+```
+
+**Pair with the TITO cron job** so it runs after every simulation:
+
+```sh
+./manage_cron.sh install titiler_api/refresh_titiler.sh
+```
+
+### Test Web App (titiler_viewer) *(Optional)*
+
+A lightweight Svelte web app is included to test the TiTiler endpoints and visualize outputs.
+
+**Prerequisites:** Node.js 18+ and npm must be installed.
+
+**1. Setup the viewer**
+
+```sh
+cd titiler_viewer
+bash setup.sh
+```
+
+This script checks for Node.js/npm, installs all required packages (Svelte, Vite, Leaflet), and verifies the project structure.
+
+**2. Start TiTiler on port 2000** (the viewer expects port 2000 by default)
+
+```sh
+cd titiler_api
+./start.sh 2000
+```
+
+**3. Start the viewer**
+
+```sh
+cd titiler_viewer
+npm run dev
+```
+
+The viewer will be available at `http://localhost:3000`.
+
+> **Note:** For additional information on simulation timelines and outputs, please refer to the **TITO Simulation and Outputs info.pptx** document.
 
 ## Contact
 Please contact Naman Mehta at naman-mehta@uiowa.edu or Vanessa Robledo at vanessa-robledodelgado@uiowa.edu or the [AHWA Laboratory](https://ahwa.lab.uiowa.edu/) Development team at engr-ahwa-lab@uiowa.edu.
