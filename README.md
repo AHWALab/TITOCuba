@@ -274,6 +274,14 @@ npm run dev
 
 El visor estará disponible en `http://localhost:3000`.
 
+![Captura de la aplicación web como referencia](SS1.png)
+![Captura de la aplicación web como referencia](SS2.png)
+![Captura de la aplicación web como referencia](SS3.png)
+![Captura de la aplicación web como referencia](SS4.png)
+![Captura de la aplicación web como referencia](SS5.png)
+![Captura de la aplicación web como referencia](SS7.png)
+![Captura de la aplicación web como referencia](SS8.png)
+
 > **Nota:** Para información adicional sobre las líneas de tiempo y salidas de la simulación, consulte el documento **TITO Simulation and Outputs info.pptx**.
 
 ## Contacto

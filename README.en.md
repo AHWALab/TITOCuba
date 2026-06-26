@@ -274,6 +274,14 @@ npm run dev
 
 The viewer will be available at `http://localhost:3000`.
 
+![Screenshot from the web app for reference](SS1.png)
+![Screenshot from the web app for reference](SS2.png)
+![Screenshot from the web app for reference](SS3.png)
+![Screenshot from the web app for reference](SS4.png)
+![Screenshot from the web app for reference](SS5.png)
+![Screenshot from the web app for reference](SS7.png)
+![Screenshot from the web app for reference](SS8.png)
+
 > **Note:** For additional information on simulation timelines and outputs, please refer to the **TITO Simulation and Outputs info.pptx** document.
 
 ## Contact
