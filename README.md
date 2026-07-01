@@ -4,6 +4,14 @@ English version: [README.en.md](README.en.md)
 
 TITO es un marco de trabajo diseñado para ejecutar operativamente el modelo hidrológico EF5, integrando datos satelitales, técnicas de aprendizaje automático y productos de predicción numérica del tiempo para apoyar el pronóstico en tiempo real y el análisis hidrológico.
 
+### Requisitos
+
+TITO utiliza **Conda** como gestor de paquetes. Todas las dependencias de Python y del sistema están definidas en `tito_env.yml`. El script de instalación creará automáticamente el entorno Conda `tito_env` a partir de este archivo.
+
+- **Gestor de paquetes:** Conda (Miniconda o Anaconda)
+- **Entorno Python:** Definido en [`tito_env.yml`](tito_env.yml)
+- **Paquetes principales:** numpy, scipy, pandas, gdal, rasterio, xarray, netcdf4, cfgrib, herbie-data, pytorch, entre otros
+
 ## Instrucciones de instalación
 **1. Clonar el repositorio**
   ```sh

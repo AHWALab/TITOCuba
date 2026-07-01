@@ -4,6 +4,14 @@ Spanish version: [README.md](README.md)
 
 TITO is a framework designed to run the EF5 hydrologic model operationally, integrating satellite data, machine learning techniques and NWP products to support real-time forecasting and hydrologic analysis.
 
+### Requirements
+
+TITO uses **Conda** as its package manager. All Python and system dependencies are defined in `tito_env.yml`. The setup script will automatically create the `tito_env` Conda environment from this file.
+
+- **Package manager:** Conda (Miniconda or Anaconda)
+- **Python environment:** Defined in [`tito_env.yml`](tito_env.yml)
+- **Key packages:** numpy, scipy, pandas, gdal, rasterio, xarray, netcdf4, cfgrib, herbie-data, pytorch, and more
+
 ## Installation Instructions
 **1. Clone the repository**
   ```sh
