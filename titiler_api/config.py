@@ -14,9 +14,9 @@ from typing import Dict, List, Optional
 # ── Base data root ──────────────────────────────────────────────────────────
 # TiTiler serves directly from the GeoServer data tree.
 # Must match DATA_ROOT in refresh_titiler.sh.
-# DATA_ROOT = "/var/ef5/geoServer"
+DATA_ROOT = "/var/ef5/geoServer"
 
-DATA_ROOT = "/home/nammehta/TITOCubaMainTest/titilerTest"
+# DATA_ROOT = "/home/nammehta/TITOCubaMainTest/titilerTest"
 
 
 

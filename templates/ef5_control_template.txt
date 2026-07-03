@@ -28,7 +28,7 @@ TYPE=TIF
 
 #---Start Gauge-Basin Block
 
-
+#-- Data Assimilation Gauge List
 [gauge EMB2100002] lat=22.5696163020675 lon=-83.5374999999999 outputts=false WANTDA=true obs=DA_Simulation/EMB2100002_Vertimiento_Serie.csv
 [gauge EMB2100004] lat=22.6113479215636 lon=-83.405318745103 outputts=false WANTDA=true obs=DA_Simulation/EMB2100004_Vertimiento_Serie.csv
 [gauge EMB2100005] lat=22.4375931916102 lon=-83.8541666666665 outputts=false WANTDA=true obs=DA_Simulation/EMB2100005_Vertimiento_Serie.csv
@@ -220,13 +220,10 @@ TYPE=TIF
 [gauge EMB3500004] lat=20.2238228497895 lon=-75.1625 outputts=false WANTDA=true obs=DA_Simulation/EMB3500004_Vertimiento_Serie.csv
 [gauge EMB3500005] lat=20.1965221626044 lon=-75.2798554959377 outputts=false WANTDA=true obs=DA_Simulation/EMB3500005_Vertimiento_Serie.csv
 [gauge EMB3500006] lat=20.1291666666666 lon=-75.358278704048 outputts=false WANTDA=true obs=DA_Simulation/EMB3500006_Vertimiento_Serie.csv
+#-- Data Assimilation Gauge List END
 
 
-#[Gauge La_Habana]
-#LON=-82.411563
-#LAT=23.120617
-#OUTPUTTS=TRUE
-
+#-- Gauge List for Time Series
 [Gauge La_Habana]
 LON=-82.33101316
 LAT=23.11085508
@@ -476,6 +473,7 @@ OUTPUTTS=TRUE
 LON=-78.337500
 LAT=22.095833
 OUTPUTTS=TRUE
+#-- Gauge List for Time Series END
 
 [Gauge 0] cellx=923 celly=313 outputts=false #Num Cells = 11158.000000
 [Gauge 1] cellx=642 celly=185 outputts=false #Num Cells = 3224.000000
