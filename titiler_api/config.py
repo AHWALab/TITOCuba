@@ -4,7 +4,7 @@ TiTiler API Configuration — Product definitions, paths, and colormaps.
 All GeoTIFF directories and styling are defined here so the API server
 does not need any other configuration source.
 
-Cuba GFS + IMERG products (6 layers). Served from /var/ef5/geoServer/.
+Cuba GFS + IMERG products (6 layers). Served from /var/EF5/geoServer/.
 """
 
 import os
@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 # ── Base data root ──────────────────────────────────────────────────────────
 # TiTiler serves directly from the GeoServer data tree.
 # Must match DATA_ROOT in refresh_titiler.sh.
-DATA_ROOT = "/var/ef5/geoServer"
+DATA_ROOT = "/var/EF5/geoServer"
 
 # DATA_ROOT = "/home/nammehta/TITOCubaMainTest/titilerTest"
 
