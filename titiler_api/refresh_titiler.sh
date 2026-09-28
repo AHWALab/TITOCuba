@@ -4,12 +4,21 @@
 # =============================================================================
 #
 # Reads raw TITO pipeline output from:
-#   /var/ef5/TITOCuba/outputs/tmp_output_crest  (standard)
-#   /var/ef5/TITOCuba/outputs_25m               (high-res depth)
+#   /var/EF5/TITOCuba/outputs/tmp_output_crest              (standard 1km)
+#   /var/EF5/TITOCuba/outputs_25m/tmp_output_crest_25m      (high-res depth)
 #
 # Renames to match existing GeoServer naming (param_YYYYMMDDTHHMMSS.tif),
 # converts to Cloud-Optimized GeoTIFF (COG), and places them directly in
-# the TiTiler data directories under /var/ef5/geoServer/.
+# the TiTiler data directories.
+#
+# Snapshot products (maxq, maxunitq, ...) go flat under DATA_ROOT/<param>/.
+# Time-series products (precip, q, unitq, sm) go under
+# DATA_ROOT/<dest>/<run_timestamp>/geotiff/  (1km crest output only).
+# CSV pixel extracts (ID,value) go to .../<run_timestamp>/csv/ for time-series,
+# and next to the GeoTIFF (DATA_ROOT/<param>/<name>.csv) for 1km snapshot products.
+# Grid lookup DATA_ROOT/pixel_id_map.csv maps ID → lat,lon once for the 1km domain.
+# Snapshot CSVs start from DATA_ROOT/csv_export_since.txt (set on first run to the
+# newest existing snapshot), so an existing archive is not backfilled.
 #
 # This is a SOFT refresh — no store/layer teardown. Only file operations.
 # Skips files that have already been processed (idempotent).
@@ -31,18 +40,18 @@ echo "════════════════════════�
 # ── Path Configuration (hardcoded) ───────────────────────────────────────
 # Source: TITO pipeline raw output directories
 SRC_CREST="/var/EF5/TITOCuba/outputs/tmp_output_crest"
-SRC_DEPTH="/var/EF5/TITOCuba/outputs_25m"
+SRC_DEPTH="/var/EF5/TITOCuba/outputs_25m/tmp_output_crest_25m"
 
 # SRC_CREST="/home/nammehta/TITOCubaMainTest/TITOCuba/outputs/tmp_output_crest"
 # SRC_DEPTH="/home/nammehta/TITOCubaMainTest/TITOCuba/outputs_25m/tmp_output_crest_25m"
 
 # Target: TiTiler serves directly from these GeoServer data directories
 DATA_ROOT="/var/EF5/geoServer"
-# DATA_ROOT="/home/nammehta/TITOCubaMainTest/titilerTest"
+# DATA_ROOT="/Dedicated/Humberto/Naman/TITO_Cuba_Titiler_outputs"
 
 # ── Product Mapping ──────────────────────────────────────────────────────
-# param → target subdirectory (just the param name, flat under DATA_ROOT)
-# e.g. maxq files go to /var/EF5/geoServer/maxq/
+# Snapshot products: param → flat dest under DATA_ROOT
+# e.g. maxq files go to DATA_ROOT/maxq/maxq_YYYYMMDDTHHMMSS.tif
 declare -A PRODUCTS
 PRODUCTS["maxunitq"]=1
 PRODUCTS["maxq"]=1
@@ -50,6 +59,15 @@ PRODUCTS["qpfaccum"]=1
 PRODUCTS["qpeaccum"]=1
 PRODUCTS["maxsm"]=1
 PRODUCTS["maxdepth"]=1
+
+# Time-series products from 1km crest output only (not 25m).
+# Source param → dest subdirectory; files go to DATA_ROOT/<dest>/<run_timestamp>/
+# e.g. q.20260908_0900.crest.tif → streamflow/202609071900/q_20260908T090000.tif
+declare -A SERIES_PRODUCTS
+SERIES_PRODUCTS["precip"]="precip"
+SERIES_PRODUCTS["q"]="streamflow"
+SERIES_PRODUCTS["unitq"]="unitq"
+SERIES_PRODUCTS["sm"]="soilmoisture"
 
 # ── Helper: COG-convert in-place ─────────────────────────────────────────
 convert_to_cog() {
@@ -70,6 +88,32 @@ convert_to_cog() {
     else
         rm -f "$cog_tmp"
         return 1
+    fi
+}
+
+# Parse TITO pipeline TIFF names into _param, _f_date, _f_time (HHMMSS).
+# Formats:
+#   Standard:     param.date.time.tif              (maxq.20250608.120000.tif)
+#   High-res:     param.25m.date.time.tif          (maxdepth.25m.20250608.120000.tif)
+#   Time-series:  param.YYYYMMDD_HHMM.crest.tif    (precip.20260907_1530.crest.tif)
+parse_tito_filename() {
+    local fname="$1"
+    _param="${fname%%.*}"
+    if [[ "$fname" == *".25m."* ]]; then
+        _f_date=$(echo "$fname" | cut -d'.' -f3)
+        _f_time=$(echo "$fname" | cut -d'.' -f4)
+    elif [[ "$fname" == *.crest.tif || "$fname" == *.crest.tiff ]]; then
+        local dt
+        dt=$(echo "$fname" | cut -d'.' -f2)
+        _f_date="${dt%%_*}"
+        _f_time="${dt##*_}"
+    else
+        _f_date=$(echo "$fname" | cut -d'.' -f2)
+        _f_time=$(echo "$fname" | cut -d'.' -f3)
+    fi
+    _f_time="${_f_time%%.*}"
+    if [[ ${#_f_time} -eq 4 ]]; then
+        _f_time="${_f_time}00"
     fi
 }
 
@@ -146,44 +190,45 @@ process_source() {
 
         # ── Process TIFFs ────────────────────────────────────────────
         while IFS= read -r -d '' src_file; do
-            local fname param f_date f_time
+            local fname param f_date f_time dest_param dest_dir dest_file new_name
+            local is_series=0
             fname=$(basename "$src_file")
+            parse_tito_filename "$fname"
+            param="$_param"
+            f_date="$_f_date"
+            f_time="$_f_time"
 
-            # Parse TITO pipeline filename
-            # Two formats:
-            #   Standard: param.date.time.tif        (maxq.20250608.120000.tif)
-            #   High-res: param.25m.date.time.tif    (maxdepth.25m.20250608.120000.tif)
-            if [[ "$fname" == *".25m."* ]]; then
-                param=$(echo "$fname" | cut -d'.' -f1)
-                f_date=$(echo "$fname" | cut -d'.' -f3)
-                f_time=$(echo "$fname" | cut -d'.' -f4)
+            # Time-series layers (1km only): precip/q/unitq/sm nested by run timestamp
+            if [[ -n "${SERIES_PRODUCTS[$param]:-}" && -z "$log_subdir" ]]; then
+                dest_param="${SERIES_PRODUCTS[$param]}"
+                dest_dir="${DATA_ROOT}/${dest_param}/${ts_name}/geotiff"
+                new_name="${param}_${f_date}T${f_time}.tif"
+                dest_file="${dest_dir}/${new_name}"
+                is_series=1
+            elif [[ -n "${PRODUCTS[$param]:-}" ]]; then
+                dest_param="$param"
+                dest_dir="${DATA_ROOT}/${param}"
+                new_name="${param}_${f_date}T${f_time}.tif"
+                dest_file="${dest_dir}/${new_name}"
             else
-                param=$(echo "$fname" | cut -d'.' -f1)
-                f_date=$(echo "$fname" | cut -d'.' -f2)
-                f_time=$(echo "$fname" | cut -d'.' -f3)
+                continue
             fi
-
-            # Only process known products
-            [[ -z "${PRODUCTS[$param]:-}" ]] && continue
-
-            # Build target filename with underscore (matches existing files)
-            # Existing format: maxq_20250608T120000.tif
-            local new_name="${param}_${f_date}T${f_time}.tif"
-            local dest_dir="${DATA_ROOT}/${param}"
-            local dest_file="${dest_dir}/${new_name}"
 
             mkdir -p "$dest_dir"
 
             # Skip if already processed, but retroactively add metadata if missing
             if [[ -f "$dest_file" ]]; then
-                # Check if metadata already exists
-                if ! gdalinfo "$dest_file" 2>/dev/null | grep -q "TIME_BEGIN"; then
+                if [[ "$is_series" -eq 0 ]] && ! gdalinfo "$dest_file" 2>/dev/null | grep -q "TIME_BEGIN"; then
                     write_tiff_meta "$dest_file" "$param" "$ts_name"
                 fi
                 continue
             fi
 
-            echo "      📋 ${fname} → ${param}/${new_name}"
+            if [[ "$is_series" -eq 1 ]]; then
+                echo "      📋 ${fname} → ${dest_param}/${ts_name}/geotiff/${new_name}"
+            else
+                echo "      📋 ${fname} → ${param}/${new_name}"
+            fi
             mv "$src_file" "$dest_file"
             tiff_count=$((tiff_count + 1))
 
@@ -191,7 +236,9 @@ process_source() {
             if convert_to_cog "$dest_file"; then
                 echo "      ✅ ${new_name}"
                 cog_ok=$((cog_ok + 1))
-                write_tiff_meta "$dest_file" "$param" "$ts_name"
+                if [[ "$is_series" -eq 0 ]]; then
+                    write_tiff_meta "$dest_file" "$param" "$ts_name"
+                fi
             else
                 echo "      ❌ ${new_name} — COG FAILED"
                 cog_fail=$((cog_fail + 1))
@@ -250,17 +297,17 @@ process_source() {
             local lf_name="${leftover##*/}"
             # TIFFs: destination uses underscore naming (param_YYYYMMDDTHHMMSS.tif)
             if [[ "$lf_name" == *.tif ]] || [[ "$lf_name" == *.tiff ]]; then
-                local lf_param lf_date lf_time
-                if [[ "$lf_name" == *".25m."* ]]; then
-                    lf_param="${lf_name%%.*}"
-                    lf_date="$(echo "$lf_name" | cut -d'.' -f3)"
-                    lf_time="$(echo "$lf_name" | cut -d'.' -f4)"
+                parse_tito_filename "$lf_name"
+                local lf_dest
+                if [[ -n "${SERIES_PRODUCTS[$_param]:-}" && -z "$log_subdir" ]]; then
+                    local lf_dest_param="${SERIES_PRODUCTS[$_param]}"
+                    lf_dest="${DATA_ROOT}/${lf_dest_param}/${ts_name}/geotiff/${_param}_${_f_date}T${_f_time}.tif"
+                    local lf_dest_old="${DATA_ROOT}/${lf_dest_param}/${ts_name}/${_param}_${_f_date}T${_f_time}.tif"
+                    [[ -f "$lf_dest" || -f "$lf_dest_old" ]] && rm -f "$leftover"
+                    continue
                 else
-                    lf_param="${lf_name%%.*}"
-                    lf_date="$(echo "$lf_name" | cut -d'.' -f2)"
-                    lf_time="$(echo "$lf_name" | cut -d'.' -f3)"
+                    lf_dest="${DATA_ROOT}/${_param}/${_param}_${_f_date}T${_f_time}.tif"
                 fi
-                local lf_dest="${DATA_ROOT}/${lf_param}/${lf_param}_${lf_date}T${lf_time}.tif"
                 [[ -f "$lf_dest" ]] && rm -f "$leftover"
             # CSVs → discharge/{timestep}/
             elif [[ "$lf_name" == *.csv ]]; then
@@ -289,6 +336,20 @@ process_source() {
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────
+# Snapshot CSV cutoff: recorded once, before staging, as the newest snapshot
+# already archived. Only granules staged after it get CSVs. Delete the file to
+# backfill everything.
+CSV_SINCE_FILE="${DATA_ROOT}/csv_export_since.txt"
+if [[ ! -f "$CSV_SINCE_FILE" ]]; then
+    mkdir -p "$DATA_ROOT"
+    csv_since=$(for p in maxq maxunitq maxsm qpeaccum qpfaccum; do
+            [[ -d "${DATA_ROOT}/${p}" ]] && find "${DATA_ROOT}/${p}" -maxdepth 1 -type f -name "${p}_*T*.tif" -printf '%f\n'
+        done | sed -nE 's/.*_([0-9]{8}T[0-9]{6})\.tif$/\1/p' | sort | tail -n 1)
+    echo "${csv_since:-00000000T000000}" > "$CSV_SINCE_FILE"
+    echo "📌 Snapshot CSV export starts after ${csv_since:-00000000T000000} (${CSV_SINCE_FILE})"
+fi
+CSV_SINCE=$(head -n 1 "$CSV_SINCE_FILE" | tr -d '[:space:]')
+
 echo "📂 Scanning TITO output directories..."
 
 process_source "$SRC_CREST"
@@ -317,6 +378,27 @@ retro_metadata() {
 }
 retro_metadata
 
+# ── GeoTIFF → CSV (timeseries + 1km snapshots) ─────────────────────────
+echo ""
+echo "📄 Converting GeoTIFFs to CSV..."
+# Same conda locations as pipeline.sh; needs numpy + rasterio (tito_env has both)
+TITO_PY=""
+for base in "${HOME}/miniconda3" "${HOME}/anaconda3" "${HOME}/mambaforge" "/opt/conda"; do
+    for env in tito_env2 tito_env; do
+        if [[ -x "${base}/envs/${env}/bin/python" ]]; then
+            TITO_PY="${base}/envs/${env}/bin/python"
+            break 2
+        fi
+    done
+done
+if [[ -z "$TITO_PY" ]]; then
+    echo "   ⚠️  tito_env/tito_env2 python not found — skipping CSV export"
+elif ! "$TITO_PY" "${SCRIPT_DIR}/timeseries_to_csv.py" --data-root "$DATA_ROOT" \
+        --snapshot-since "$CSV_SINCE"; then
+    # Non-fatal: GeoTIFF staging above already succeeded; retried next run
+    echo "   ⚠️  CSV export reported errors — continuing"
+fi
+
 # ── Fix permissions ──────────────────────────────────────────────────────
 echo "🔐 Fixing permissions on ${DATA_ROOT}..."
 chmod -R a+rX "$DATA_ROOT" 2>/dev/null || true
@@ -331,6 +413,16 @@ for param in "${!PRODUCTS[@]}"; do
     if [[ -d "$dir" ]]; then
         count=$(find "$dir" -maxdepth 1 -type f -name "*.tif" | wc -l)
         echo "   ${param}: ${count} granules"
+    fi
+done
+
+for src_param in "${!SERIES_PRODUCTS[@]}"; do
+    dest_param="${SERIES_PRODUCTS[$src_param]}"
+    dir="${DATA_ROOT}/${dest_param}"
+    if [[ -d "$dir" ]]; then
+        ts_count=$(find "$dir" -mindepth 1 -maxdepth 1 -type d | wc -l)
+        count=$(find "$dir" -type f -name "*.tif" | wc -l)
+        echo "   ${dest_param}: ${ts_count} timesteps, ${count} granules"
     fi
 done
 
